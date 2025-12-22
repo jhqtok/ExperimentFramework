@@ -13,11 +13,19 @@
     <Description>Source generator for ExperimentFramework that generates compile-time proxies for high-performance experiment execution.</Description>
     <PackageTags>source-generator;roslyn;code-generation;experiments;performance</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <PackageType>Analyzer</PackageType>
 
     <!-- Pack as development dependency analyzer -->
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <DevelopmentDependency>true</DevelopmentDependency>
+    <NoPackageAnalysis>true</NoPackageAnalysis>
+
+    <!-- Suppress warnings/errors for source generator packages -->
+    <NoWarn>$(NoWarn);NU5128;NU5017</NoWarn>
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);NU5017</WarningsNotAsErrors>
   </PropertyGroup>
 
   <ItemGroup>
@@ -27,8 +35,17 @@
     </PackageReference>
   </ItemGroup>
 
-  <!-- Pack the generator DLL as an analyzer -->
+  <!-- Pack the generator DLL as an analyzer and include README -->
   <ItemGroup>
     <None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+    <None Include="README.md" Pack="true" PackagePath="\" />
+    <None Include="build\**" Pack="true" PackagePath="build" />
   </ItemGroup>
+
+  <!-- Ensure the generator DLL is included in the package -->
+  <Target Name="IncludeGeneratorInPackage" BeforeTargets="GenerateNuspec">
+    <ItemGroup>
+      <None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+    </ItemGroup>
+  </Target>
 </Project>
