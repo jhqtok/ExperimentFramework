@@ -1,0 +1,6 @@
+<Project>
+  <!-- This file ensures the source generator is properly loaded -->
+  <ItemGroup>
+    <!-- The generator DLL is automatically loaded from analyzers/dotnet/cs -->
+  </ItemGroup>
+</Project>
