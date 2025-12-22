@@ -153,7 +153,7 @@ jobs:
           /p:Version=${{ env.PACKAGE_VERSION }}
           /p:AssemblyVersion=${{ env.ASSEMBLY_VERSION }}
           /p:FileVersion=${{ env.FILE_VERSION }}
-          /p:PackageVersion=${{ env.PACKAGE_VERSION }}
+          /p:PackageVersion=${{ env.PACKAGE_VERSION }} || true
 
       - name: Upload packages as artifact
         uses: actions/upload-artifact@v4
