@@ -108,3 +108,6 @@ app.MapGet("/", () => Results.Json(new
 .WithName("Home");
 
 app.Run();
+
+// Make Program class accessible for integration tests
+public partial class Program { }

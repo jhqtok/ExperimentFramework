@@ -8,6 +8,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="ExperimentFramework.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\ExperimentFramework\ExperimentFramework.csproj" />
     <ProjectReference Include="..\..\src\ExperimentFramework.Generators\ExperimentFramework.Generators.csproj"
                       OutputItemType="Analyzer"

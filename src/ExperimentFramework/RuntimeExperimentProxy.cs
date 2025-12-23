@@ -22,7 +22,7 @@ namespace ExperimentFramework;
 /// compared to &lt;100ns for source-generated proxies. Use source generators when possible.
 /// </para>
 /// </remarks>
-internal sealed class RuntimeExperimentProxy<TService> : DispatchProxy
+internal class RuntimeExperimentProxy<TService> : DispatchProxy
     where TService : class
 {
     private IServiceScopeFactory? _scopeFactory;
@@ -39,9 +39,7 @@ internal sealed class RuntimeExperimentProxy<TService> : DispatchProxy
         IExperimentDecoratorFactory[] decoratorFactories,
         IExperimentTelemetry telemetry)
     {
-        var proxy = Create<TService, RuntimeExperimentProxy<TService>>() as RuntimeExperimentProxy<TService>;
-
-        if (proxy == null)
+        if (Create<TService, RuntimeExperimentProxy<TService>>() is not RuntimeExperimentProxy<TService> proxy)
             throw new InvalidOperationException($"Failed to create DispatchProxy for {typeof(TService).FullName}");
 
         proxy._scopeFactory = scopeFactory;
