@@ -16,7 +16,20 @@ Add the ExperimentFramework package to your project:
 dotnet add package ExperimentFramework
 ```
 
-For feature flag support, also install:
+**Choose your proxy mode:**
+
+**Option A: Source-Generated Proxies (Recommended)**
+```bash
+dotnet add package ExperimentFramework.Generators
+```
+
+This enables compile-time proxy generation with near-zero overhead (<100ns per call). Requires using `[ExperimentCompositionRoot]` attribute or calling `.UseSourceGenerators()`.
+
+**Option B: Runtime Proxies (Alternative)**
+
+No additional package needed. Use `.UseDispatchProxy()` in your configuration. This has higher overhead (~800ns per call) but offers more flexibility and easier debugging.
+
+**For feature flag support:**
 
 ```bash
 dotnet add package Microsoft.FeatureManagement
@@ -108,22 +121,51 @@ builder.Services.AddScoped<IDatabase, LocalDatabase>();
 
 ### Step 4: Define the Experiment
 
-Configure the experiment using the fluent builder API:
+Configure the experiment using the fluent builder API.
+
+**Option A: Using Source-Generated Proxies (Fast)**
+
+Add a method with the `[ExperimentCompositionRoot]` attribute:
 
 ```csharp
-// Define the experiment
-var experiments = ExperimentFrameworkBuilder.Create()
-    .Define<IDatabase>(experiment => experiment
-        .UsingFeatureFlag("UseCloudDb")
-        .AddDefaultTrial<LocalDatabase>("false")
-        .AddTrial<CloudDatabase>("true")
-        .OnErrorRedirectAndReplayDefault());
+[ExperimentCompositionRoot]
+public static ExperimentFrameworkBuilder ConfigureExperiments()
+{
+    return ExperimentFrameworkBuilder.Create()
+        .Define<IDatabase>(experiment => experiment
+            .UsingFeatureFlag("UseCloudDb")
+            .AddDefaultTrial<LocalDatabase>("false")
+            .AddTrial<CloudDatabase>("true")
+            .OnErrorRedirectAndReplayDefault());
+}
 
 // Register the experiment framework
+var experiments = ConfigureExperiments();
 builder.Services.AddExperimentFramework(experiments);
 ```
 
-Let's break down what this code does:
+The `[ExperimentCompositionRoot]` attribute triggers source generation at compile time.
+
+**Option B: Using Runtime Proxies (Flexible)**
+
+```csharp
+public static ExperimentFrameworkBuilder ConfigureExperiments()
+{
+    return ExperimentFrameworkBuilder.Create()
+        .Define<IDatabase>(experiment => experiment
+            .UsingFeatureFlag("UseCloudDb")
+            .AddDefaultTrial<LocalDatabase>("false")
+            .AddTrial<CloudDatabase>("true")
+            .OnErrorRedirectAndReplayDefault())
+        .UseDispatchProxy(); // Use runtime proxies
+}
+
+// Register the experiment framework
+var experiments = ConfigureExperiments();
+builder.Services.AddExperimentFramework(experiments);
+```
+
+**What this code does:**
 
 - `ExperimentFrameworkBuilder.Create()` creates a new builder
 - `.Define<IDatabase>()` specifies we're experimenting on the IDatabase interface
@@ -131,6 +173,7 @@ Let's break down what this code does:
 - `.AddDefaultTrial<LocalDatabase>("false")` sets LocalDatabase as the default (used when flag is off)
 - `.AddTrial<CloudDatabase>("true")` sets CloudDatabase as the trial (used when flag is on)
 - `.OnErrorRedirectAndReplayDefault()` means if CloudDatabase throws, fall back to LocalDatabase
+- `[ExperimentCompositionRoot]` or `.UseDispatchProxy()` determines which proxy mode to use
 
 ### Step 5: Configure the Feature Flag
 

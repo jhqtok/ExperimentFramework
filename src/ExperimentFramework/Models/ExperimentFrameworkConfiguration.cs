@@ -30,7 +30,12 @@ namespace ExperimentFramework.Models;
 /// The set of experiment definitions describing which services participate in experiments
 /// and how their trials are selected.
 /// </param>
+/// <param name="UseRuntimeProxies">
+/// If true, uses DispatchProxy-based runtime proxies instead of source-generated compile-time proxies.
+/// Defaults to false (source generators).
+/// </param>
 internal sealed record ExperimentFrameworkConfiguration(
     IExperimentDecoratorFactory[] DecoratorFactories,
-    IExperimentDefinition[] Definitions
+    IExperimentDefinition[] Definitions,
+    bool UseRuntimeProxies = false
 );

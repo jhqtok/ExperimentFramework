@@ -42,9 +42,7 @@ public sealed class DecoratorPipeline
     /// </remarks>
     public object? Invoke(InvocationContext ctx, Func<object?> terminal)
     {
-        Func<ValueTask<object?>> asyncTerminal = () => new ValueTask<object?>(terminal());
-
-        var next = asyncTerminal;
+        var next = (Func<ValueTask<object?>>)AsyncTerminal;
 
         // Outer-to-inner in registration order.
         for (var i = _decorators.Length - 1; i >= 0; i--)
@@ -55,6 +53,8 @@ public sealed class DecoratorPipeline
         }
 
         return next().AsTask().GetAwaiter().GetResult();
+
+        ValueTask<object?> AsyncTerminal() => new(terminal());
     }
 
     /// <summary>

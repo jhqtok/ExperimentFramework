@@ -39,6 +39,18 @@ public sealed class ExperimentRegistration
     public required OnErrorPolicy OnErrorPolicy { get; init; }
 
     /// <summary>
+    /// Gets the trial key to use as a fallback when <see cref="OnErrorPolicy"/> is
+    /// <see cref="OnErrorPolicy.RedirectAndReplay"/>.
+    /// </summary>
+    public string? FallbackTrialKey { get; init; }
+
+    /// <summary>
+    /// Gets an ordered list of trial keys to attempt as fallbacks when <see cref="OnErrorPolicy"/> is
+    /// <see cref="OnErrorPolicy.RedirectAndReplayOrdered"/>.
+    /// </summary>
+    public IReadOnlyList<string>? OrderedFallbackKeys { get; init; }
+
+    /// <summary>
     /// Returns a debug-friendly representation of the registration.
     /// </summary>
     public override string ToString()

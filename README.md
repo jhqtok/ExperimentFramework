@@ -29,7 +29,15 @@ A .NET framework for runtime-switchable A/B testing, feature flags, trial fallba
 
 ## Quick Start
 
-### 1. Register Services
+### 1. Install Packages
+
+```bash
+dotnet add package ExperimentFramework
+dotnet add package ExperimentFramework.Generators  # For source-generated proxies
+# OR use runtime proxies (no generator package needed)
+```
+
+### 2. Register Services
 
 ```csharp
 // Register concrete implementations
@@ -40,10 +48,12 @@ builder.Services.AddScoped<MyCloudDbContext>();
 builder.Services.AddScoped<IMyDatabase, MyDbContext>();
 ```
 
-### 2. Configure Experiments
+### 3. Configure Experiments
+
+**Option A: Source-Generated Proxies (Recommended - Fast)**
 
 ```csharp
-[ExperimentCompositionRoot]
+[ExperimentCompositionRoot]  // Triggers source generation
 public static ExperimentFrameworkBuilder ConfigureExperiments()
 {
     return ExperimentFrameworkBuilder.Create()
@@ -65,7 +75,25 @@ var experiments = ConfigureExperiments();
 builder.Services.AddExperimentFramework(experiments);
 ```
 
-### 3. Use Services Normally
+**Option B: Runtime Proxies (Flexible)**
+
+```csharp
+public static ExperimentFrameworkBuilder ConfigureExperiments()
+{
+    return ExperimentFrameworkBuilder.Create()
+        .Define<IMyDatabase>(c =>
+            c.UsingFeatureFlag("UseCloudDb")
+             .AddDefaultTrial<MyDbContext>("false")
+             .AddTrial<MyCloudDbContext>("true")
+             .OnErrorRedirectAndReplayDefault())
+        .UseDispatchProxy();  // Use runtime proxies instead
+}
+
+var experiments = ConfigureExperiments();
+builder.Services.AddExperimentFramework(experiments);
+```
+
+### 4. Use Services Normally
 
 ```csharp
 public class MyService
@@ -141,15 +169,65 @@ c.UsingStickyRouting()
 
 Control fallback behavior when trials fail:
 
+### 1. Throw (Default)
+Exception propagates immediately, no retries:
 ```csharp
-// Throw immediately on error (default)
-.OnErrorRedirectAndReplayDefault()
+// No method call needed - Throw is the default policy
+.Define<IMyService>(c => c
+    .UsingFeatureFlag("MyFeature")
+    .AddDefaultTrial<DefaultImpl>("false")
+    .AddTrial<ExperimentalImpl>("true"))
+// If ExperimentalImpl throws, exception propagates to caller
+```
 
-// Fall back to default trial on error
-.OnErrorRedirectAndReplayDefault()
+### 2. RedirectAndReplayDefault
+Falls back to default trial on error:
+```csharp
+.Define<IMyService>(c => c
+    .UsingFeatureFlag("MyFeature")
+    .AddDefaultTrial<DefaultImpl>("false")
+    .AddTrial<ExperimentalImpl>("true")
+    .OnErrorRedirectAndReplayDefault())
+// Tries: [preferred, default]
+```
 
-// Try all trials until one succeeds
-.OnErrorRedirectAndReplayAny()
+### 3. RedirectAndReplayAny
+Tries all trials until one succeeds (sorted alphabetically):
+```csharp
+.Define<IMyService>(c => c
+    .UsingConfigurationKey("ServiceVariant")
+    .AddDefaultTrial<DefaultImpl>("")
+    .AddTrial<VariantA>("a")
+    .AddTrial<VariantB>("b")
+    .OnErrorRedirectAndReplayAny())
+// Tries all variants in sorted order until one succeeds
+```
+
+### 4. RedirectAndReplay
+Redirects to a specific fallback trial (e.g., Noop diagnostics handler):
+```csharp
+.Define<IMyService>(c => c
+    .UsingFeatureFlag("MyFeature")
+    .AddDefaultTrial<PrimaryImpl>("true")
+    .AddTrial<SecondaryImpl>("false")
+    .AddTrial<NoopHandler>("noop")
+    .OnErrorRedirectAndReplay("noop"))
+// Tries: [preferred, specific_fallback]
+// Useful for dedicated diagnostics/safe-mode handlers
+```
+
+### 5. RedirectAndReplayOrdered
+Tries ordered list of fallback trials:
+```csharp
+.Define<IMyService>(c => c
+    .UsingFeatureFlag("UseCloudDb")
+    .AddDefaultTrial<CloudDbImpl>("true")
+    .AddTrial<LocalCacheImpl>("cache")
+    .AddTrial<InMemoryCacheImpl>("memory")
+    .AddTrial<StaticDataImpl>("static")
+    .OnErrorRedirectAndReplayOrdered("cache", "memory", "static"))
+// Tries: [preferred, cache, memory, static] in exact order
+// Fine-grained control over fallback strategy
 ```
 
 ## Custom Naming Conventions
@@ -262,12 +340,38 @@ Because the JSON file is loaded with `reloadOnChange: true`, changes will be pic
 
 ## How It Works
 
-### Source Generation
-The framework uses Roslyn source generators to create optimized proxy classes at compile time:
-1. The `[ExperimentCompositionRoot]` attribute triggers the generator
+### Proxy Generation
+
+The framework supports two proxy modes:
+
+**1. Source-Generated Proxies (Default, Recommended)**
+
+Uses Roslyn source generators to create optimized proxy classes at compile time:
+1. The `[ExperimentCompositionRoot]` attribute or `.UseSourceGenerators()` triggers the generator
 2. The generator analyzes `Define<T>()` calls to extract interface types
 3. For each interface, a proxy class is generated implementing direct method calls
 4. Generated proxies are discovered and registered automatically
+
+Performance: <100ns overhead per method call (near-zero reflection overhead)
+
+**2. Runtime Proxies (Alternative)**
+
+Uses `System.Reflection.DispatchProxy` for dynamic proxies:
+
+```csharp
+var experiments = ExperimentFrameworkBuilder.Create()
+    .Define<IMyDatabase>(c => c.UsingFeatureFlag("UseCloudDb")...)
+    .UseDispatchProxy(); // Use runtime proxies instead of source generation
+
+builder.Services.AddExperimentFramework(experiments);
+```
+
+Performance: ~800ns overhead per method call (reflection-based)
+
+Use runtime proxies when:
+- Source generators are not available in your build environment
+- You need maximum debugging flexibility
+- Performance overhead is acceptable for your use case
 
 ### DI Rewriting
 When you call `AddExperimentFramework()`:
@@ -428,9 +532,12 @@ All async and generic scenarios validated with comprehensive tests:
 
 ## Important Notes
 
+- **Proxy Mode Selection**: You must choose between source-generated or runtime proxies:
+  - Source-generated (recommended): Requires `ExperimentFramework.Generators` package + `[ExperimentCompositionRoot]` attribute or `.UseSourceGenerators()` call
+  - Runtime (alternative): No extra package needed, just call `.UseDispatchProxy()` on the builder
 - Trials **must be registered by concrete type** (ImplementationType) in DI. Factory/instance registrations are not supported.
-- Source generation requires either `[ExperimentCompositionRoot]` attribute or `.UseSourceGenerators()` fluent API call.
-- Generated proxies use direct method calls for zero-reflection overhead.
+- Source-generated proxies use direct method calls for zero-reflection overhead (<100ns per call).
+- Runtime proxies use `DispatchProxy` with reflection (~800ns per call).
 - Variant feature flag support requires reflection to access internal Microsoft.FeatureManagement APIs and may require updates for future versions.
 
 ## API Reference
@@ -440,6 +547,8 @@ All async and generic scenarios validated with comprehensive tests:
 | Method | Description |
 |--------|-------------|
 | `Create()` | Creates a new framework builder |
+| `UseSourceGenerators()` | Use compile-time source-generated proxies (<100ns overhead) |
+| `UseDispatchProxy()` | Use runtime DispatchProxy-based proxies (~800ns overhead) |
 | `UseNamingConvention(IExperimentNamingConvention)` | Sets custom naming convention |
 | `AddLogger(Action<ExperimentLoggingBuilder>)` | Adds logging decorators |
 | `AddDecoratorFactory(IExperimentDecoratorFactory)` | Adds custom decorator |
@@ -457,6 +566,8 @@ All async and generic scenarios validated with comprehensive tests:
 | `AddTrial<TImpl>(string)` | Registers additional trial |
 | `OnErrorRedirectAndReplayDefault()` | Falls back to default on error |
 | `OnErrorRedirectAndReplayAny()` | Tries all trials on error |
+| `OnErrorRedirectAndReplay(string)` | Redirects to specific fallback trial on error |
+| `OnErrorRedirectAndReplayOrdered(params string[])` | Tries ordered list of fallback trials on error |
 
 ### Extension Methods
 

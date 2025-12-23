@@ -205,3 +205,66 @@ public class VariantBService : IVariantTestService
 {
     public string GetName() => "VariantBService";
 }
+
+// IRedirectSpecificService for RedirectAndReplay error policy tests
+public interface IRedirectSpecificService
+{
+    string Execute();
+}
+
+public class PrimaryService : IRedirectSpecificService
+{
+    public string Execute() => throw new InvalidOperationException("PrimaryService failed");
+}
+
+public class SecondaryService : IRedirectSpecificService
+{
+    public string Execute() => throw new InvalidOperationException("SecondaryService failed");
+}
+
+public class NoopFallbackService : IRedirectSpecificService
+{
+    public string Execute() => "NoopFallback";
+}
+
+// IRedirectOrderedService for RedirectAndReplayOrdered error policy tests
+public interface IRedirectOrderedService
+{
+    string Execute();
+}
+
+public class CloudService : IRedirectOrderedService
+{
+    public string Execute() => throw new TimeoutException("CloudService timeout");
+}
+
+public class LocalCacheService : IRedirectOrderedService
+{
+    public string Execute() => throw new KeyNotFoundException("LocalCache miss");
+}
+
+public class InMemoryCacheService : IRedirectOrderedService
+{
+    public string Execute() => "InMemoryCache";
+}
+
+public class StaticDataService : IRedirectOrderedService
+{
+    public string Execute() => "StaticData";
+}
+
+// Additional implementations for testing ordered fallback with all failures
+public class AlwaysFailsService1 : IRedirectOrderedService
+{
+    public string Execute() => throw new InvalidOperationException("Service1 failed");
+}
+
+public class AlwaysFailsService2 : IRedirectOrderedService
+{
+    public string Execute() => throw new InvalidOperationException("Service2 failed");
+}
+
+public class AlwaysFailsService3 : IRedirectOrderedService
+{
+    public string Execute() => throw new InvalidOperationException("Service3 failed");
+}

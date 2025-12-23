@@ -17,5 +17,15 @@ public enum OnErrorPolicy
     /// <summary>
     /// If the selected trial fails, attempt other configured trials (including default) until one succeeds.
     /// </summary>
-    RedirectAndReplayAny
+    RedirectAndReplayAny,
+
+    /// <summary>
+    /// If the selected trial fails, redirect to a specific single trial.
+    /// </summary>
+    RedirectAndReplay,
+
+    /// <summary>
+    /// If the selected trial fails, attempt an ordered list of fallback trials until one succeeds.
+    /// </summary>
+    RedirectAndReplayOrdered
 }
