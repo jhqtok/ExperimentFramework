@@ -15,7 +15,9 @@ internal sealed class ExperimentDefinitionModel
         string selectorName,
         string defaultKey,
         ImmutableDictionary<string, INamedTypeSymbol> trials,
-        ErrorPolicyModel errorPolicy)
+        ErrorPolicyModel errorPolicy,
+        string? fallbackTrialKey = null,
+        ImmutableArray<string>? orderedFallbackKeys = null)
     {
         ServiceType = serviceType;
         SelectionMode = selectionMode;
@@ -23,6 +25,8 @@ internal sealed class ExperimentDefinitionModel
         DefaultKey = defaultKey;
         Trials = trials;
         ErrorPolicy = errorPolicy;
+        FallbackTrialKey = fallbackTrialKey;
+        OrderedFallbackKeys = orderedFallbackKeys ?? ImmutableArray<string>.Empty;
     }
 
     /// <summary>
@@ -54,6 +58,16 @@ internal sealed class ExperimentDefinitionModel
     /// The error policy for this experiment (Throw, RedirectAndReplayDefault, etc.).
     /// </summary>
     public ErrorPolicyModel ErrorPolicy { get; }
+
+    /// <summary>
+    /// The fallback trial key for RedirectAndReplay policy.
+    /// </summary>
+    public string? FallbackTrialKey { get; }
+
+    /// <summary>
+    /// The ordered list of fallback trial keys for RedirectAndReplayOrdered policy.
+    /// </summary>
+    public ImmutableArray<string> OrderedFallbackKeys { get; }
 }
 
 /// <summary>
@@ -74,7 +88,9 @@ internal enum ErrorPolicyModel
 {
     Throw,
     RedirectAndReplayDefault,
-    RedirectAndReplayAny
+    RedirectAndReplayAny,
+    RedirectAndReplay,
+    RedirectAndReplayOrdered
 }
 
 /// <summary>

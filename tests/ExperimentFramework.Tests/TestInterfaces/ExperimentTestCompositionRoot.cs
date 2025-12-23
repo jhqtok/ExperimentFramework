@@ -73,6 +73,26 @@ public static class ExperimentTestCompositionRoot
                 .UsingVariantFeatureFlag("MyVariantFeature")
                 .AddDefaultTrial<ControlService>("control")
                 .AddTrial<VariantAService>("variant-a")
-                .AddTrial<VariantBService>("variant-b"));
+                .AddTrial<VariantBService>("variant-b"))
+
+            // IRedirectSpecificService for RedirectAndReplay error policy tests
+            .Define<IRedirectSpecificService>(c => c
+                .UsingFeatureFlag("UsePrimaryService")
+                .AddDefaultTrial<PrimaryService>("true")
+                .AddTrial<SecondaryService>("false")
+                .AddTrial<NoopFallbackService>("noop")
+                .OnErrorRedirectAndReplay("noop"))
+
+            // IRedirectOrderedService for RedirectAndReplayOrdered error policy tests
+            .Define<IRedirectOrderedService>(c => c
+                .UsingFeatureFlag("UseCloudService")
+                .AddDefaultTrial<CloudService>("true")
+                .AddTrial<LocalCacheService>("cache")
+                .AddTrial<InMemoryCacheService>("memory")
+                .AddTrial<StaticDataService>("static")
+                .AddTrial<AlwaysFailsService1>("fail1")
+                .AddTrial<AlwaysFailsService2>("fail2")
+                .AddTrial<AlwaysFailsService3>("fail3")
+                .OnErrorRedirectAndReplayOrdered("cache", "memory", "static"));
     }
 }

@@ -24,19 +24,20 @@ public static class ServiceCollectionExtensions
     /// <list type="number">
     /// <item><description>Builds the framework configuration from the provided builder.</description></item>
     /// <item><description>Registers the <see cref="ExperimentRegistry"/> as a singleton.</description></item>
-    /// <item><description>For each experiment definition, configures the service interface with a source-generated proxy.</description></item>
+    /// <item><description>For each experiment definition, configures the service interface with either a source-generated proxy or DispatchProxy-based runtime proxy.</description></item>
     /// </list>
     /// <para>
     /// <strong>Requirements:</strong>
     /// </para>
     /// <list type="bullet">
     /// <item><description>Service implementations must be registered by their concrete type before calling this method.</description></item>
-    /// <item><description>The composition root method must either be decorated with <c>[ExperimentCompositionRoot]</c> attribute or call <c>.UseSourceGenerators()</c> on the builder.</description></item>
-    /// <item><description>The project must reference ExperimentFramework.Generators as an analyzer.</description></item>
+    /// <item><description>For source generators: The composition root method must either be decorated with <c>[ExperimentCompositionRoot]</c> attribute or call <c>.UseSourceGenerators()</c> on the builder.</description></item>
+    /// <item><description>For runtime proxies: Call <c>.UseDispatchProxy()</c> on the builder.</description></item>
     /// </list>
     /// <para>
-    /// The framework uses compile-time source generators to create zero-overhead proxies.
-    /// All generated proxies are registered as singletons and create scopes internally per invocation.
+    /// The framework defaults to compile-time source generators for zero-overhead proxies (&lt;100ns).
+    /// Runtime proxies (DispatchProxy) incur ~800ns overhead but provide more flexibility.
+    /// All proxies are registered as singletons and create scopes internally per invocation.
     /// </para>
     /// </remarks>
     public static IServiceCollection AddExperimentFramework(
@@ -73,22 +74,33 @@ public static class ServiceCollectionExtensions
             // Remove the existing interface registration
             services.Remove(existingDescriptor);
 
-            // Find the source-generated proxy (required)
-            var generatedProxyType = TryFindGeneratedProxy(serviceType);
+            Func<IServiceProvider, object> proxyFactory;
 
-            if (generatedProxyType == null)
+            if (config.UseRuntimeProxies)
             {
-                throw new InvalidOperationException(
-                    $"No source-generated proxy found for {serviceType.FullName}. " +
-                    $"Ensure your composition root method is decorated with [ExperimentCompositionRoot] attribute " +
-                    $"or calls .UseSourceGenerators() on the builder, " +
-                    $"and the project references ExperimentFramework.Generators as an analyzer.");
+                // Use DispatchProxy-based runtime proxy
+                proxyFactory = CreateRuntimeProxyFactory(serviceType, config);
+            }
+            else
+            {
+                // Find the source-generated proxy (required)
+                var generatedProxyType = TryFindGeneratedProxy(serviceType);
+
+                if (generatedProxyType == null)
+                {
+                    throw new InvalidOperationException(
+                        $"No source-generated proxy found for {serviceType.FullName}. " +
+                        $"Ensure your composition root method is decorated with [ExperimentCompositionRoot] attribute " +
+                        $"or calls .UseSourceGenerators() on the builder, " +
+                        $"and the project references ExperimentFramework.Generators as an analyzer. " +
+                        $"Alternatively, call .UseDispatchProxy() to use runtime proxies instead.");
+                }
+
+                // Use source-generated proxy (compile-time, zero reflection overhead)
+                proxyFactory = CreateGeneratedProxyFactory(serviceType, generatedProxyType, config);
             }
 
-            // Use source-generated proxy (compile-time, zero reflection overhead)
-            var proxyFactory = CreateGeneratedProxyFactory(serviceType, generatedProxyType, config);
-
-            // Generated proxies are always singleton (they create scopes internally)
+            // All proxies are singleton (they create scopes internally)
             services.Add(new ServiceDescriptor(serviceType, proxyFactory, ServiceLifetime.Singleton));
         }
 
@@ -190,6 +202,50 @@ public static class ServiceCollectionExtensions
                 telemetry);
 
             return proxy ?? throw new InvalidOperationException($"Failed to create generated proxy for {serviceType.FullName}");
+        };
+    }
+
+
+    /// <summary>
+    /// Creates a factory for a runtime DispatchProxy-based proxy.
+    /// </summary>
+    /// <param name="serviceType">The service interface type.</param>
+    /// <param name="config">The experiment framework configuration.</param>
+    /// <returns>A factory function that creates the runtime proxy.</returns>
+    private static Func<IServiceProvider, object> CreateRuntimeProxyFactory(
+        Type serviceType,
+        ExperimentFrameworkConfiguration config)
+    {
+        return sp =>
+        {
+            var registry = sp.GetRequiredService<ExperimentRegistry>();
+
+            if (!registry.TryGet(serviceType, out var registration))
+            {
+                throw new InvalidOperationException($"No experiment registration found for {serviceType.FullName}");
+            }
+
+            var telemetry = sp.GetRequiredService<IExperimentTelemetry>();
+            var scopeFactory = sp.GetRequiredService<IServiceScopeFactory>();
+
+            // RuntimeExperimentProxy<TService>.Create(scopeFactory, registration, decoratorFactories, telemetry)
+            var proxyType = typeof(RuntimeExperimentProxy<>).MakeGenericType(serviceType);
+            var createMethod = proxyType.GetMethod("Create", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+
+            if (createMethod == null)
+            {
+                throw new InvalidOperationException($"Failed to find Create method on RuntimeExperimentProxy<{serviceType.FullName}>");
+            }
+
+            var proxy = createMethod.Invoke(null, new object[]
+            {
+                scopeFactory,
+                registration,
+                config.DecoratorFactories,
+                telemetry
+            });
+
+            return proxy ?? throw new InvalidOperationException($"Failed to create runtime proxy for {serviceType.FullName}");
         };
     }
 

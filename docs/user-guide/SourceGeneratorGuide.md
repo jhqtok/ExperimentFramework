@@ -190,6 +190,86 @@ public class MyService
 }
 ```
 
+## Proxy Modes
+
+The framework supports two proxy generation strategies:
+
+### Source-Generated Proxies (Default, Recommended)
+
+Compile-time code generation using Roslyn source generators:
+
+**Advantages:**
+- Near-zero overhead (<100ns per call)
+- No reflection at runtime
+- AOT compatible
+- Full type safety
+
+**Configuration:**
+```csharp
+[ExperimentCompositionRoot]
+public static ExperimentFrameworkBuilder ConfigureExperiments()
+{
+    return ExperimentFrameworkBuilder.Create()
+        .Define<IMyDatabase>(c => c
+            .UsingFeatureFlag("UseCloudDb")
+            .AddDefaultTrial<LocalDatabase>("false")
+            .AddTrial<CloudDatabase>("true"));
+    // Source generation triggered by [ExperimentCompositionRoot]
+}
+```
+
+Or explicitly with fluent API:
+```csharp
+public static ExperimentFrameworkBuilder ConfigureExperiments()
+{
+    return ExperimentFrameworkBuilder.Create()
+        .Define<IMyDatabase>(/* ... */)
+        .UseSourceGenerators(); // Explicit marker
+}
+```
+
+### Runtime Proxies (Alternative)
+
+Dynamic proxy generation using `System.Reflection.DispatchProxy`:
+
+**Advantages:**
+- No source generator required
+- Maximum debugging flexibility
+- Simpler build process
+
+**Disadvantages:**
+- Higher overhead (~800ns per call)
+- Reflection-based dispatch
+- Not AOT compatible
+
+**Configuration:**
+```csharp
+public static ExperimentFrameworkBuilder ConfigureExperiments()
+{
+    return ExperimentFrameworkBuilder.Create()
+        .Define<IMyDatabase>(c => c
+            .UsingFeatureFlag("UseCloudDb")
+            .AddDefaultTrial<LocalDatabase>("false")
+            .AddTrial<CloudDatabase>("true"))
+        .UseDispatchProxy(); // Use runtime proxies
+}
+```
+
+**When to use runtime proxies:**
+- Source generators are not available in your build environment
+- You need maximum debugging flexibility during development
+- Performance overhead is acceptable for your use case
+- You're prototyping or doing short-term experiments
+
+**Performance Comparison:**
+
+| Operation | Source Generated | Runtime Proxy |
+|-----------|------------------|---------------|
+| Proxy overhead | <100ns | ~800ns |
+| Method invocation | Direct call | Reflection-based |
+| Allocations | Minimal | Higher (boxing) |
+| AOT compatible | Yes | No |
+
 ## How It Works
 
 ### Source Generation

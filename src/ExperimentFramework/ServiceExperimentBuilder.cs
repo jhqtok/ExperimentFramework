@@ -33,6 +33,8 @@ public sealed class ServiceExperimentBuilder<TService>
     private SelectionMode _mode = SelectionMode.BooleanFeatureFlag;
     private string? _selectorName;
     private OnErrorPolicy _onErrorPolicy = OnErrorPolicy.Throw;
+    private string? _fallbackTrialKey;
+    private List<string>? _orderedFallbackKeys;
 
     /// <summary>
     /// Configures trial selection to use a boolean feature flag.
@@ -218,6 +220,74 @@ public sealed class ServiceExperimentBuilder<TService>
     }
 
     /// <summary>
+    /// Configures the experiment to redirect to a specific trial if the selected trial throws.
+    /// </summary>
+    /// <param name="fallbackTrialKey">
+    /// The trial key to use as a fallback. This trial will be invoked if the selected trial fails.
+    /// </param>
+    /// <returns>The current builder instance.</returns>
+    /// <remarks>
+    /// <para>
+    /// This policy is useful when you want to redirect failed requests to a specific handler,
+    /// such as a no-op implementation, a diagnostic handler, or a known-safe fallback.
+    /// </para>
+    /// <para>
+    /// If the fallback trial also throws, the exception propagates to the caller.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="fallbackTrialKey"/> is null.
+    /// </exception>
+    public ServiceExperimentBuilder<TService> OnErrorRedirectAndReplay(string fallbackTrialKey)
+    {
+        if (fallbackTrialKey == null)
+            throw new ArgumentNullException(nameof(fallbackTrialKey));
+
+        _onErrorPolicy = OnErrorPolicy.RedirectAndReplay;
+        _fallbackTrialKey = fallbackTrialKey;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures the experiment to attempt an ordered list of fallback trials if the selected trial throws.
+    /// </summary>
+    /// <param name="orderedFallbackKeys">
+    /// An ordered list of trial keys to attempt as fallbacks. Trials are attempted in the order specified
+    /// until one succeeds or all fail.
+    /// </param>
+    /// <returns>The current builder instance.</returns>
+    /// <remarks>
+    /// <para>
+    /// This policy provides fine-grained control over fallback behavior by specifying exactly
+    /// which trials to try and in what order.
+    /// </para>
+    /// <para>
+    /// If all fallback trials throw, the last exception propagates to the caller.
+    /// </para>
+    /// <para>
+    /// This policy should be used with caution, as it may result in multiple side effects
+    /// if the invoked operation is not idempotent.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="orderedFallbackKeys"/> is null.
+    /// </exception>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="orderedFallbackKeys"/> is empty.
+    /// </exception>
+    public ServiceExperimentBuilder<TService> OnErrorRedirectAndReplayOrdered(params string[] orderedFallbackKeys)
+    {
+        if (orderedFallbackKeys == null)
+            throw new ArgumentNullException(nameof(orderedFallbackKeys));
+        if (orderedFallbackKeys.Length == 0)
+            throw new ArgumentException("At least one fallback trial key must be specified.", nameof(orderedFallbackKeys));
+
+        _onErrorPolicy = OnErrorPolicy.RedirectAndReplayOrdered;
+        _orderedFallbackKeys = new List<string>(orderedFallbackKeys);
+        return this;
+    }
+
+    /// <summary>
     /// Builds an immutable experiment definition from the configured state.
     /// </summary>
     /// <param name="convention">
@@ -259,7 +329,9 @@ public sealed class ServiceExperimentBuilder<TService>
             SelectorName = selectorName,
             DefaultKey = _defaultKey,
             Trials = new Dictionary<string, Type>(_trials, StringComparer.Ordinal),
-            OnErrorPolicy = _onErrorPolicy
+            OnErrorPolicy = _onErrorPolicy,
+            FallbackTrialKey = _fallbackTrialKey,
+            OrderedFallbackKeys = _orderedFallbackKeys?.AsReadOnly()
         };
     }
 }

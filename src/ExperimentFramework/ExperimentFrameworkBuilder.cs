@@ -27,6 +27,7 @@ public sealed class ExperimentFrameworkBuilder
     private readonly List<IExperimentDecoratorFactory> _decoratorFactories = new();
     private readonly List<IExperimentDefinition> _definitions = new();
     private IExperimentNamingConvention _namingConvention = new DefaultExperimentNamingConvention();
+    private bool _useRuntimeProxies = false;
 
     private ExperimentFrameworkBuilder() { }
 
@@ -164,6 +165,36 @@ public sealed class ExperimentFrameworkBuilder
     public ExperimentFrameworkBuilder UseSourceGenerators()
     {
         // Marker method - detected by source generator
+        _useRuntimeProxies = false;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures the framework to use DispatchProxy-based runtime proxies instead of source-generated compile-time proxies.
+    /// </summary>
+    /// <returns>The current builder instance.</returns>
+    /// <remarks>
+    /// <para>
+    /// When this method is called, the framework will use <see cref="System.Reflection.DispatchProxy"/>
+    /// to create proxies dynamically at runtime, rather than using source generators.
+    /// </para>
+    /// <para>
+    /// <strong>Performance Impact:</strong> Runtime proxies incur reflection overhead (~800ns per call)
+    /// compared to source-generated proxies (&lt;100ns). Use this option only when:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>Source generators are not available in your build environment</description></item>
+    /// <item><description>You need maximum debugging flexibility</description></item>
+    /// <item><description>Performance overhead is acceptable for your use case</description></item>
+    /// </list>
+    /// <para>
+    /// <strong>Note:</strong> You cannot use both .UseSourceGenerators() and .UseDispatchProxy() -
+    /// the last method called takes precedence.
+    /// </para>
+    /// </remarks>
+    public ExperimentFrameworkBuilder UseDispatchProxy()
+    {
+        _useRuntimeProxies = true;
         return this;
     }
 
@@ -207,5 +238,5 @@ public sealed class ExperimentFrameworkBuilder
     /// the configuration should be treated as immutable.
     /// </remarks>
     internal ExperimentFrameworkConfiguration Build()
-        => new(_decoratorFactories.ToArray(), _definitions.ToArray());
+        => new(_decoratorFactories.ToArray(), _definitions.ToArray(), _useRuntimeProxies);
 }

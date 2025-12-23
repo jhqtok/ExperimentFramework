@@ -26,6 +26,18 @@ Install the ExperimentFramework package via NuGet:
 dotnet add package ExperimentFramework
 ```
 
+**For source-generated proxies (recommended for best performance):**
+
+```bash
+dotnet add package ExperimentFramework.Generators
+```
+
+Use `[ExperimentCompositionRoot]` attribute or `.UseSourceGenerators()` in your configuration.
+
+**For runtime proxies (alternative, more flexible):**
+
+No additional package needed. Use `.UseDispatchProxy()` in your configuration.
+
 ## Quick Example
 
 Define an experiment that switches between database implementations based on a feature flag:
@@ -36,15 +48,32 @@ services.AddScoped<LocalDatabase>();
 services.AddScoped<CloudDatabase>();
 services.AddScoped<IDatabase, LocalDatabase>();
 
-// Configure the experiment
-var experiments = ExperimentFrameworkBuilder.Create()
-    .Define<IDatabase>(c => c
-        .UsingFeatureFlag("UseCloudDb")
-        .AddDefaultTrial<LocalDatabase>("false")
-        .AddTrial<CloudDatabase>("true")
-        .OnErrorRedirectAndReplayDefault());
+// Configure the experiment (source-generated proxies)
+[ExperimentCompositionRoot]
+static ExperimentFrameworkBuilder ConfigureExperiments()
+{
+    return ExperimentFrameworkBuilder.Create()
+        .Define<IDatabase>(c => c
+            .UsingFeatureFlag("UseCloudDb")
+            .AddDefaultTrial<LocalDatabase>("false")
+            .AddTrial<CloudDatabase>("true")
+            .OnErrorRedirectAndReplayDefault());
+}
+
+// OR use runtime proxies
+static ExperimentFrameworkBuilder ConfigureWithRuntimeProxies()
+{
+    return ExperimentFrameworkBuilder.Create()
+        .Define<IDatabase>(c => c
+            .UsingFeatureFlag("UseCloudDb")
+            .AddDefaultTrial<LocalDatabase>("false")
+            .AddTrial<CloudDatabase>("true")
+            .OnErrorRedirectAndReplayDefault())
+        .UseDispatchProxy();
+}
 
 // Register with dependency injection
+var experiments = ConfigureExperiments();
 services.AddExperimentFramework(experiments);
 ```
 

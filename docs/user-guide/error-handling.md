@@ -4,13 +4,15 @@ ExperimentFramework provides built-in error handling strategies to manage failur
 
 ## Error Policies
 
-Error policies determine what happens when a trial throws an exception. The framework supports three policies:
+Error policies determine what happens when a trial throws an exception. The framework supports five policies:
 
 | Policy | Behavior | Use Case |
 |--------|----------|----------|
 | Throw | Propagate the exception immediately | Development, when you want to see failures |
 | RedirectAndReplayDefault | Fall back to default trial on error | Production, safe rollback to stable code |
 | RedirectAndReplayAny | Try all trials until one succeeds | High availability scenarios |
+| RedirectAndReplay | Redirect to specific fallback trial | Dedicated diagnostics/safe-mode handlers |
+| RedirectAndReplayOrdered | Try ordered list of fallback trials | Fine-grained control over fallback strategy |
 
 ## Throw Policy (Default)
 
@@ -292,6 +294,249 @@ Result:
 3. Try InMemoryCache -> Throws OutOfMemoryException
 4. Propagate OutOfMemoryException to caller
 ```
+
+## RedirectAndReplay Policy
+
+The redirect-and-replay policy redirects to a specific fallback trial (e.g., a Noop diagnostics handler) when the selected trial fails.
+
+### When to Use
+
+- When you need a dedicated safe-mode or diagnostics handler
+- When you want fine-grained control over which trial handles failures
+- When the fallback trial should differ from the default trial
+- Circuit breaker patterns with specific fallback logic
+
+### Configuration
+
+```csharp
+.Define<IDiagnosticsHandler>(c => c
+    .UsingFeatureFlag("UsePrimaryDiagnostics")
+    .AddDefaultTrial<PrimaryDiagnosticsHandler>("true")
+    .AddTrial<SecondaryDiagnosticsHandler>("false")
+    .AddTrial<NoopDiagnosticsHandler>("noop")
+    .OnErrorRedirectAndReplay("noop"))
+```
+
+### Behavior
+
+When the selected trial throws, the framework redirects to the specified fallback trial:
+
+```
+1. Try PrimaryDiagnosticsHandler (selected by feature flag)
+   └─ Throws TimeoutException
+
+2. Catch exception
+
+3. Try NoopDiagnosticsHandler (specified fallback)
+   └─ Succeeds (no-op returns immediately)
+
+4. Return result
+```
+
+### Example Scenario
+
+Diagnostics handler with safe-mode fallback:
+
+```csharp
+public class PrimaryDiagnosticsHandler : IDiagnosticsHandler
+{
+    public async Task CollectDiagnosticsAsync()
+    {
+        // May timeout connecting to diagnostics service
+        throw new TimeoutException("Diagnostics service unavailable");
+    }
+}
+
+public class NoopDiagnosticsHandler : IDiagnosticsHandler
+{
+    public Task CollectDiagnosticsAsync()
+    {
+        // No-op: always succeeds, does nothing
+        return Task.CompletedTask;
+    }
+}
+```
+
+Usage:
+
+```csharp
+// Primary diagnostics fails, falls back to noop
+await diagnosticsHandler.CollectDiagnosticsAsync();
+
+// Application continues without diagnostics
+// No exception is thrown
+```
+
+### When Fallback Trial Also Fails
+
+If the specified fallback trial also throws, the exception propagates:
+
+```
+1. Try PrimaryDiagnosticsHandler -> Throws TimeoutException
+2. Try NoopDiagnosticsHandler -> Throws InvalidOperationException
+3. Propagate InvalidOperationException to caller
+```
+
+## RedirectAndReplayOrdered Policy
+
+The redirect-and-replay-ordered policy tries an ordered list of fallback trials in exact sequence until one succeeds.
+
+### When to Use
+
+- When you need fine-grained control over fallback priority
+- Multi-tier caching strategies (cloud → local → memory → static)
+- When fallback order matters for performance or cost
+- When you have specific degradation paths
+
+### Configuration
+
+```csharp
+.Define<IDataService>(c => c
+    .UsingFeatureFlag("UseCloudDatabase")
+    .AddDefaultTrial<CloudDatabaseImpl>("true")
+    .AddTrial<LocalCacheImpl>("cache")
+    .AddTrial<InMemoryCacheImpl>("memory")
+    .AddTrial<StaticDataImpl>("static")
+    .OnErrorRedirectAndReplayOrdered("cache", "memory", "static"))
+```
+
+### Behavior
+
+When a trial throws, the framework tries the fallback trials in exact order:
+
+```
+1. Try CloudDatabaseImpl (selected by feature flag)
+   └─ Throws ConnectionException
+
+2. Try LocalCacheImpl (first fallback)
+   └─ Throws IOException
+
+3. Try InMemoryCacheImpl (second fallback)
+   └─ Succeeds
+
+4. Return result
+```
+
+The framework stops at the first successful trial and doesn't try remaining fallbacks.
+
+### Example Scenario
+
+Multi-tier data service with degradation strategy:
+
+```csharp
+public interface IDataService
+{
+    Task<CustomerData> GetCustomerDataAsync(int customerId);
+}
+
+public class CloudDatabaseImpl : IDataService
+{
+    public async Task<CustomerData> GetCustomerDataAsync(int customerId)
+    {
+        // Cloud database might be unavailable
+        throw new ConnectionException("Cloud database unreachable");
+    }
+}
+
+public class LocalCacheImpl : IDataService
+{
+    public async Task<CustomerData> GetCustomerDataAsync(int customerId)
+    {
+        // Local cache might be corrupted
+        throw new IOException("Cache file corrupted");
+    }
+}
+
+public class InMemoryCacheImpl : IDataService
+{
+    private readonly ConcurrentDictionary<int, CustomerData> _cache = new();
+
+    public Task<CustomerData> GetCustomerDataAsync(int customerId)
+    {
+        // In-memory cache succeeds with cached data
+        if (_cache.TryGetValue(customerId, out var data))
+            return Task.FromResult(data);
+
+        return Task.FromResult(new CustomerData { Id = customerId, Name = "Unknown" });
+    }
+}
+
+public class StaticDataImpl : IDataService
+{
+    public Task<CustomerData> GetCustomerDataAsync(int customerId)
+    {
+        // Static fallback returns placeholder data
+        return Task.FromResult(new CustomerData
+        {
+            Id = customerId,
+            Name = "Loading...",
+            IsPlaceholder = true
+        });
+    }
+}
+```
+
+Usage:
+
+```csharp
+// Configuration: Cloud → LocalCache → InMemory → Static
+var customerData = await dataService.GetCustomerDataAsync(123);
+
+// Framework tries:
+// 1. CloudDatabase (fails - connection error)
+// 2. LocalCache (fails - corrupted)
+// 3. InMemoryCache (succeeds - returns cached data)
+// 4. StaticData (not tried - InMemory succeeded)
+
+// Caller receives result from InMemoryCache
+```
+
+### Trial Order Rules
+
+The framework tries trials in this exact order:
+
+1. **Selected trial** (based on selection mode) - tried first
+2. **Ordered fallback keys** (in the order you specify) - tried in sequence
+3. **Fallback keys are skipped if they match the selected trial** - prevents duplicate attempts
+
+Example:
+
+```csharp
+.OnErrorRedirectAndReplayOrdered("cache", "memory", "static")
+```
+
+If feature flag selects `"memory"`, the order becomes:
+```
+1. Try "memory" (selected)
+2. Try "cache" (first fallback, not already tried)
+3. Try "static" (second fallback, not already tried)
+```
+
+The selected trial is never retried even if it appears in the fallback list.
+
+### When All Trials Fail
+
+If all trials in the ordered sequence throw exceptions, the last exception propagates:
+
+```
+1. Try CloudDatabaseImpl -> Throws ConnectionException
+2. Try LocalCacheImpl -> Throws IOException
+3. Try InMemoryCacheImpl -> Throws InvalidOperationException
+4. Try StaticDataImpl -> Throws NotImplementedException
+5. Propagate NotImplementedException to caller
+```
+
+### Performance Considerations
+
+Each fallback attempt incurs the cost of:
+- Service resolution from DI container
+- Decorator pipeline execution
+- Method invocation overhead
+
+For performance-critical paths, consider:
+- Keeping the fallback list short (2-3 trials max)
+- Using fast-fail implementations that fail quickly
+- Monitoring fallback rates to identify problematic trials
 
 ## Error Logging Decorator
 

@@ -72,6 +72,20 @@ public sealed class SelectionModeTests(ITestOutputHelper output) : TinyBddXunitB
         services.AddScoped<NestedGenericServiceV1>();
         services.AddScoped<NestedGenericServiceV2>();
 
+        // IRedirectSpecificService implementations
+        services.AddScoped<PrimaryService>();
+        services.AddScoped<SecondaryService>();
+        services.AddScoped<NoopFallbackService>();
+
+        // IRedirectOrderedService implementations
+        services.AddScoped<CloudService>();
+        services.AddScoped<LocalCacheService>();
+        services.AddScoped<InMemoryCacheService>();
+        services.AddScoped<StaticDataService>();
+        services.AddScoped<AlwaysFailsService1>();
+        services.AddScoped<AlwaysFailsService2>();
+        services.AddScoped<AlwaysFailsService3>();
+
         // Default registrations
         services.AddScoped<ITestService, StableService>();
         services.AddScoped<IDatabase, LocalDatabase>();
@@ -83,6 +97,8 @@ public sealed class SelectionModeTests(ITestOutputHelper output) : TinyBddXunitB
         services.AddScoped<IAsyncService, AsyncServiceV1>();
         services.AddScoped<IGenericRepository<TestEntity>, GenericRepositoryV1<TestEntity>>();
         services.AddScoped<INestedGenericService, NestedGenericServiceV1>();
+        services.AddScoped<IRedirectSpecificService, PrimaryService>();
+        services.AddScoped<IRedirectOrderedService, CloudService>();
     }
 
     private static TestState SetupBooleanFeatureFlag(bool featureEnabled)

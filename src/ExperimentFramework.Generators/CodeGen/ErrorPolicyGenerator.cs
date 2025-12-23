@@ -28,6 +28,14 @@ internal static class ErrorPolicyGenerator
             case ErrorPolicyModel.RedirectAndReplayAny:
                 GenerateRedirectAndReplayAnyPolicy(sb, defaultKey);
                 break;
+
+            case ErrorPolicyModel.RedirectAndReplay:
+                GenerateRedirectAndReplayPolicy(sb, experiment.FallbackTrialKey!);
+                break;
+
+            case ErrorPolicyModel.RedirectAndReplayOrdered:
+                GenerateRedirectAndReplayOrderedPolicy(sb, experiment.OrderedFallbackKeys);
+                break;
         }
     }
 
@@ -71,6 +79,41 @@ internal static class ErrorPolicyGenerator
         sb.AppendLine("                .ToList();");
         sb.AppendLine();
         sb.AppendLine("            candidates.AddRange(allKeys);");
+        sb.AppendLine();
+        sb.AppendLine("            return candidates;");
+        sb.AppendLine("        }");
+    }
+
+    private static void GenerateRedirectAndReplayPolicy(StringBuilder sb, string fallbackTrialKey)
+    {
+        sb.AppendLine("        private System.Collections.Generic.List<string> BuildCandidateKeys(string preferredKey)");
+        sb.AppendLine("        {");
+        sb.AppendLine($"            // RedirectAndReplay: Try preferred, then fallback to specific trial '{fallbackTrialKey}'");
+        sb.AppendLine($"            if (preferredKey == \"{fallbackTrialKey}\")");
+        sb.AppendLine("            {");
+        sb.AppendLine("                // If preferred is already the fallback, only try it once");
+        sb.AppendLine("                return new System.Collections.Generic.List<string> { preferredKey };");
+        sb.AppendLine("            }");
+        sb.AppendLine();
+        sb.AppendLine($"            return new System.Collections.Generic.List<string> {{ preferredKey, \"{fallbackTrialKey}\" }};");
+        sb.AppendLine("        }");
+    }
+
+    private static void GenerateRedirectAndReplayOrderedPolicy(StringBuilder sb, System.Collections.Immutable.ImmutableArray<string> orderedFallbackKeys)
+    {
+        sb.AppendLine("        private System.Collections.Generic.List<string> BuildCandidateKeys(string preferredKey)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            // RedirectAndReplayOrdered: Try preferred, then ordered fallbacks");
+        sb.AppendLine("            var candidates = new System.Collections.Generic.List<string> { preferredKey };");
+        sb.AppendLine();
+        sb.AppendLine("            // Add ordered fallbacks, skipping the preferred key if it appears");
+
+        foreach (var key in orderedFallbackKeys)
+        {
+            sb.AppendLine($"            if (preferredKey != \"{key}\")");
+            sb.AppendLine($"                candidates.Add(\"{key}\");");
+        }
+
         sb.AppendLine();
         sb.AppendLine("            return candidates;");
         sb.AppendLine("        }");

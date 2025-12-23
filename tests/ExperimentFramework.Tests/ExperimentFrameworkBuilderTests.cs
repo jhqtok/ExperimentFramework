@@ -73,6 +73,20 @@ public sealed class ExperimentFrameworkBuilderTests(ITestOutputHelper output) : 
         services.AddScoped<NestedGenericServiceV1>();
         services.AddScoped<NestedGenericServiceV2>();
 
+        // IRedirectSpecificService implementations
+        services.AddScoped<PrimaryService>();
+        services.AddScoped<SecondaryService>();
+        services.AddScoped<NoopFallbackService>();
+
+        // IRedirectOrderedService implementations
+        services.AddScoped<CloudService>();
+        services.AddScoped<LocalCacheService>();
+        services.AddScoped<InMemoryCacheService>();
+        services.AddScoped<StaticDataService>();
+        services.AddScoped<AlwaysFailsService1>();
+        services.AddScoped<AlwaysFailsService2>();
+        services.AddScoped<AlwaysFailsService3>();
+
         // Default registrations
         services.AddScoped<ITestService, StableService>();
         services.AddScoped<IDatabase, LocalDatabase>();
@@ -84,6 +98,8 @@ public sealed class ExperimentFrameworkBuilderTests(ITestOutputHelper output) : 
         services.AddScoped<IAsyncService, AsyncServiceV1>();
         services.AddScoped<IGenericRepository<TestEntity>, GenericRepositoryV1<TestEntity>>();
         services.AddScoped<INestedGenericService, NestedGenericServiceV1>();
+        services.AddScoped<IRedirectSpecificService, PrimaryService>();
+        services.AddScoped<IRedirectOrderedService, CloudService>();
     }
 
     private static BuilderState CreateBuilder()
@@ -266,6 +282,133 @@ public sealed class ExperimentFrameworkBuilderTests(ITestOutputHelper output) : 
             return (state.sp, result);
         })
         .Then("service works correctly", r => r.result == "StableService")
+        .Finally(r => r.Item1.Dispose())
+        .AssertPassed();
+
+    [Scenario("UseDispatchProxy configures runtime proxies")]
+    [Fact]
+    public void UseDispatchProxy_creates_runtime_proxies()
+        => Given("experiment with UseDispatchProxy", () =>
+        {
+            var config = new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["FeatureManagement:UseCloudDb"] = "true"
+                })
+                .Build();
+
+            var services = new ServiceCollection();
+            services.AddSingleton<IConfiguration>(config);
+            services.AddFeatureManagement();
+
+            RegisterAllTestServices(services);
+
+            // Use UseDispatchProxy instead of UseSourceGenerators
+            var builder = ExperimentFrameworkBuilder.Create()
+                .Define<IDatabase>(c => c
+                    .UsingFeatureFlag("UseCloudDb")
+                    .AddDefaultTrial<CloudDatabase>("true")
+                    .AddTrial<LocalDatabase>("false")
+                    .OnErrorRedirectAndReplayDefault())
+                .UseDispatchProxy(); // Runtime proxies instead of source generation
+
+            services.AddExperimentFramework(builder);
+            var sp = services.BuildServiceProvider();
+
+            return (State: new BuilderState(builder, services), sp);
+        })
+        .When("invoke service", state =>
+        {
+            using var scope = state.sp.CreateScope();
+            var database = scope.ServiceProvider.GetRequiredService<IDatabase>();
+            var result = database.GetName();
+            return (state.sp, result);
+        })
+        .Then("runtime proxy routes to correct implementation", r => r.result == "CloudDatabase")
+        .Finally(r => r.Item1.Dispose())
+        .AssertPassed();
+
+    [Scenario("UseDispatchProxy supports all error policies")]
+    [Fact]
+    public void UseDispatchProxy_supports_error_policies()
+        => Given("experiment with RedirectAndReplayDefault and runtime proxies", () =>
+        {
+            var config = new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["FeatureManagement:UseFailingService"] = "true"
+                })
+                .Build();
+
+            var services = new ServiceCollection();
+            services.AddSingleton<IConfiguration>(config);
+            services.AddFeatureManagement();
+
+            RegisterAllTestServices(services);
+
+            var builder = ExperimentFrameworkBuilder.Create()
+                .Define<ITestService>(c => c
+                    .UsingFeatureFlag("UseFailingService")
+                    .AddDefaultTrial<StableService>("false")
+                    .AddTrial<FailingService>("true")
+                    .OnErrorRedirectAndReplayDefault())
+                .UseDispatchProxy();
+
+            services.AddExperimentFramework(builder);
+            var sp = services.BuildServiceProvider();
+
+            return (State: new BuilderState(builder, services), sp);
+        })
+        .When("invoke service that fails", state =>
+        {
+            using var scope = state.sp.CreateScope();
+            var service = scope.ServiceProvider.GetRequiredService<ITestService>();
+            var result = service.Execute(); // Should fallback to StableService
+            return (state.sp, result);
+        })
+        .Then("runtime proxy falls back to default", r => r.result == "StableService")
+        .Finally(r => r.Item1.Dispose())
+        .AssertPassed();
+
+    [Scenario("UseDispatchProxy supports configuration-based selection")]
+    [Fact]
+    public void UseDispatchProxy_supports_configuration_selection()
+        => Given("experiment with configuration value and runtime proxies", () =>
+        {
+            var config = new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["TaxProvider:Strategy"] = "OK"
+                })
+                .Build();
+
+            var services = new ServiceCollection();
+            services.AddSingleton<IConfiguration>(config);
+            services.AddFeatureManagement();
+
+            RegisterAllTestServices(services);
+
+            var builder = ExperimentFrameworkBuilder.Create()
+                .Define<ITaxProvider>(c => c
+                    .UsingConfigurationKey("TaxProvider:Strategy")
+                    .AddDefaultTrial<DefaultTaxProvider>("Default")
+                    .AddTrial<OkTaxProvider>("OK")
+                    .AddTrial<TxTaxProvider>("TX"))
+                .UseDispatchProxy();
+
+            services.AddExperimentFramework(builder);
+            var sp = services.BuildServiceProvider();
+
+            return (State: new BuilderState(builder, services), sp);
+        })
+        .When("invoke service", state =>
+        {
+            using var scope = state.sp.CreateScope();
+            var taxProvider = scope.ServiceProvider.GetRequiredService<ITaxProvider>();
+            var result = taxProvider.CalculateTax(100);
+            return (state.sp, result);
+        })
+        .Then("runtime proxy uses configuration value", r => r.result == 105.0m) // OkTaxProvider adds 5%
         .Finally(r => r.Item1.Dispose())
         .AssertPassed();
 

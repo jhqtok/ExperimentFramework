@@ -41,7 +41,9 @@ internal static class DefineCallParser
             config.SelectorName,
             config.DefaultKey,
             config.Trials,
-            config.ErrorPolicy);
+            config.ErrorPolicy,
+            config.FallbackTrialKey,
+            config.OrderedFallbackKeys);
     }
 
     /// <summary>
@@ -94,6 +96,8 @@ internal static class DefineCallParser
         string? defaultKey = null;
         var trials = new Dictionary<string, INamedTypeSymbol>();
         ErrorPolicyModel errorPolicy = ErrorPolicyModel.Throw;
+        string? fallbackTrialKey = null;
+        List<string>? orderedFallbackKeys = null;
 
         foreach (var invocation in invocations)
         {
@@ -148,6 +152,16 @@ internal static class DefineCallParser
                     errorPolicy = ErrorPolicyModel.RedirectAndReplayAny;
                     break;
 
+                case "OnErrorRedirectAndReplay":
+                    errorPolicy = ErrorPolicyModel.RedirectAndReplay;
+                    fallbackTrialKey = ExtractStringArgument(invocation, 0);
+                    break;
+
+                case "OnErrorRedirectAndReplayOrdered":
+                    errorPolicy = ErrorPolicyModel.RedirectAndReplayOrdered;
+                    orderedFallbackKeys = ExtractStringArrayArgument(invocation);
+                    break;
+
                 case "OnErrorThrow":
                     errorPolicy = ErrorPolicyModel.Throw;
                     break;
@@ -163,7 +177,9 @@ internal static class DefineCallParser
             selectorName ?? "", // Will be filled by naming convention if empty
             defaultKey,
             trials.ToImmutableDictionary(),
-            errorPolicy);
+            errorPolicy,
+            fallbackTrialKey,
+            orderedFallbackKeys?.ToImmutableArray());
     }
 
     /// <summary>
@@ -267,6 +283,29 @@ internal static class DefineCallParser
     }
 
     /// <summary>
+    /// Extracts string array arguments (params string[]) from an invocation.
+    /// </summary>
+    private static List<string>? ExtractStringArrayArgument(InvocationExpressionSyntax invocation)
+    {
+        var arguments = invocation.ArgumentList.Arguments;
+        if (arguments.Count == 0)
+            return null;
+
+        var stringList = new List<string>();
+
+        foreach (var argument in arguments)
+        {
+            if (argument.Expression is LiteralExpressionSyntax literal &&
+                literal.IsKind(SyntaxKind.StringLiteralExpression))
+            {
+                stringList.Add(literal.Token.ValueText);
+            }
+        }
+
+        return stringList.Count > 0 ? stringList : null;
+    }
+
+    /// <summary>
     /// Intermediate result of parsing service configuration.
     /// </summary>
     private sealed class ServiceConfiguration
@@ -276,13 +315,17 @@ internal static class DefineCallParser
             string selectorName,
             string defaultKey,
             ImmutableDictionary<string, INamedTypeSymbol> trials,
-            ErrorPolicyModel errorPolicy)
+            ErrorPolicyModel errorPolicy,
+            string? fallbackTrialKey = null,
+            ImmutableArray<string>? orderedFallbackKeys = null)
         {
             SelectionMode = selectionMode;
             SelectorName = selectorName;
             DefaultKey = defaultKey;
             Trials = trials;
             ErrorPolicy = errorPolicy;
+            FallbackTrialKey = fallbackTrialKey;
+            OrderedFallbackKeys = orderedFallbackKeys;
         }
 
         public SelectionModeModel SelectionMode { get; }
@@ -290,5 +333,7 @@ internal static class DefineCallParser
         public string DefaultKey { get; }
         public ImmutableDictionary<string, INamedTypeSymbol> Trials { get; }
         public ErrorPolicyModel ErrorPolicy { get; }
+        public string? FallbackTrialKey { get; }
+        public ImmutableArray<string>? OrderedFallbackKeys { get; }
     }
 }

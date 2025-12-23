@@ -84,6 +84,24 @@ internal sealed class ServiceExperimentDefinition<TService> : IExperimentDefinit
     public required OnErrorPolicy OnErrorPolicy { get; init; }
 
     /// <summary>
+    /// Gets the trial key to use as a fallback when <see cref="OnErrorPolicy"/> is
+    /// <see cref="OnErrorPolicy.RedirectAndReplay"/>.
+    /// </summary>
+    /// <remarks>
+    /// This value is only used when the error policy is RedirectAndReplay. For other policies, it may be null.
+    /// </remarks>
+    public string? FallbackTrialKey { get; init; }
+
+    /// <summary>
+    /// Gets an ordered list of trial keys to attempt as fallbacks when <see cref="OnErrorPolicy"/> is
+    /// <see cref="OnErrorPolicy.RedirectAndReplayOrdered"/>.
+    /// </summary>
+    /// <remarks>
+    /// This value is only used when the error policy is RedirectAndReplayOrdered. For other policies, it may be null.
+    /// </remarks>
+    public IReadOnlyList<string>? OrderedFallbackKeys { get; init; }
+
+    /// <summary>
     /// Creates a runtime <see cref="ExperimentRegistration"/> from this definition.
     /// </summary>
     /// <param name="_">
@@ -105,6 +123,8 @@ internal sealed class ServiceExperimentDefinition<TService> : IExperimentDefinit
             SelectorName = SelectorName,
             DefaultKey = DefaultKey,
             Trials = Trials,
-            OnErrorPolicy = OnErrorPolicy
+            OnErrorPolicy = OnErrorPolicy,
+            FallbackTrialKey = FallbackTrialKey,
+            OrderedFallbackKeys = OrderedFallbackKeys
         };
 }
