@@ -83,63 +83,68 @@ bool isTrialDisabled = killSwitch.IsTrialDisabled(typeof(IDatabase), "cloud");
 Create HTTP endpoints for operational control:
 
 ```csharp
+// SECURITY: Create a whitelist of allowed experiment types to prevent type injection attacks
+var experimentRegistry = new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase)
+{
+    ["IDatabase"] = typeof(IDatabase),
+    ["ITaxProvider"] = typeof(ITaxProvider),
+    ["IPaymentProcessor"] = typeof(IPaymentProcessor)
+    // Add all your experiment service types here
+};
+
 var app = builder.Build();
 
 // Disable entire experiment
 app.MapPost("/admin/experiments/disable", (
-    [FromQuery] string experimentType,
+    [FromQuery] string experimentName,
     IKillSwitchProvider killSwitch) =>
 {
-    var type = Type.GetType(experimentType);
-    if (type == null)
-        return Results.NotFound($"Type '{experimentType}' not found");
+    if (!experimentRegistry.TryGetValue(experimentName, out var type))
+        return Results.NotFound($"Experiment '{experimentName}' not found");
 
     killSwitch.DisableExperiment(type);
-    return Results.Ok($"Experiment {experimentType} disabled");
+    return Results.Ok($"Experiment {experimentName} disabled");
 })
 .RequireAuthorization("Admin");
 
 // Disable specific trial
 app.MapPost("/admin/experiments/disable-trial", (
-    [FromQuery] string experimentType,
+    [FromQuery] string experimentName,
     [FromQuery] string trialKey,
     IKillSwitchProvider killSwitch) =>
 {
-    var type = Type.GetType(experimentType);
-    if (type == null)
-        return Results.NotFound($"Type '{experimentType}' not found");
+    if (!experimentRegistry.TryGetValue(experimentName, out var type))
+        return Results.NotFound($"Experiment '{experimentName}' not found");
 
     killSwitch.DisableTrial(type, trialKey);
-    return Results.Ok($"Trial '{trialKey}' of {experimentType} disabled");
+    return Results.Ok($"Trial '{trialKey}' of {experimentName} disabled");
 })
 .RequireAuthorization("Admin");
 
 // Enable experiment
 app.MapPost("/admin/experiments/enable", (
-    [FromQuery] string experimentType,
+    [FromQuery] string experimentName,
     IKillSwitchProvider killSwitch) =>
 {
-    var type = Type.GetType(experimentType);
-    if (type == null)
-        return Results.NotFound($"Type '{experimentType}' not found");
+    if (!experimentRegistry.TryGetValue(experimentName, out var type))
+        return Results.NotFound($"Experiment '{experimentName}' not found");
 
     killSwitch.EnableExperiment(type);
-    return Results.Ok($"Experiment {experimentType} enabled");
+    return Results.Ok($"Experiment {experimentName} enabled");
 })
 .RequireAuthorization("Admin");
 
 // Get status
 app.MapGet("/admin/experiments/status", (
-    [FromQuery] string experimentType,
+    [FromQuery] string experimentName,
     IKillSwitchProvider killSwitch) =>
 {
-    var type = Type.GetType(experimentType);
-    if (type == null)
-        return Results.NotFound($"Type '{experimentType}' not found");
+    if (!experimentRegistry.TryGetValue(experimentName, out var type))
+        return Results.NotFound($"Experiment '{experimentName}' not found");
 
     return Results.Ok(new
     {
-        experiment = experimentType,
+        experiment = experimentName,
         experimentDisabled = killSwitch.IsExperimentDisabled(type),
         trials = new
         {
@@ -155,15 +160,15 @@ app.MapGet("/admin/experiments/status", (
 
 ```bash
 # Disable cloud trial
-curl -X POST "https://api.example.com/admin/experiments/disable-trial?experimentType=MyApp.IDatabase&trialKey=cloud" \
+curl -X POST "https://api.example.com/admin/experiments/disable-trial?experimentName=IDatabase&trialKey=cloud" \
   -H "Authorization: Bearer $ADMIN_TOKEN"
 
 # Check status
-curl "https://api.example.com/admin/experiments/status?experimentType=MyApp.IDatabase" \
+curl "https://api.example.com/admin/experiments/status?experimentName=IDatabase" \
   -H "Authorization: Bearer $ADMIN_TOKEN"
 
 # Re-enable
-curl -X POST "https://api.example.com/admin/experiments/enable?experimentType=MyApp.IDatabase" \
+curl -X POST "https://api.example.com/admin/experiments/enable?experimentName=IDatabase" \
   -H "Authorization: Bearer $ADMIN_TOKEN"
 ```
 
@@ -366,23 +371,22 @@ Track who disabled what and when:
 
 ```csharp
 app.MapPost("/admin/experiments/disable-trial", (
-    string experimentType,
+    string experimentName,
     string trialKey,
     IKillSwitchProvider killSwitch,
     ILogger<Program> logger,
     HttpContext context) =>
 {
-    var user = context.User.Identity?.Name ?? "Unknown";
-
-    var type = Type.GetType(experimentType);
-    if (type == null)
+    if (!experimentRegistry.TryGetValue(experimentName, out var type))
         return Results.NotFound();
+
+    var user = context.User.Identity?.Name ?? "Unknown";
 
     killSwitch.DisableTrial(type, trialKey);
 
     logger.LogWarning(
         "Kill switch activated: User {User} disabled trial {Trial} of {Experiment}",
-        user, trialKey, experimentType);
+        user, trialKey, experimentName);
 
     return Results.Ok();
 })
@@ -462,13 +466,12 @@ Track kill switch usage:
 
 ```csharp
 app.MapPost("/admin/experiments/disable-trial", (
-    string experimentType,
+    string experimentName,
     string trialKey,
     IKillSwitchProvider killSwitch,
     PrometheusExperimentMetrics metrics) =>
 {
-    var type = Type.GetType(experimentType);
-    if (type == null)
+    if (!experimentRegistry.TryGetValue(experimentName, out var type))
         return Results.NotFound();
 
     killSwitch.DisableTrial(type, trialKey);
@@ -477,7 +480,7 @@ app.MapPost("/admin/experiments/disable-trial", (
     metrics.IncrementCounter("killswitch_activations_total",
         tags: new[]
         {
-            new KeyValuePair<string, object>("experiment", experimentType),
+            new KeyValuePair<string, object>("experiment", experimentName),
             new KeyValuePair<string, object>("trial", trialKey)
         });
 

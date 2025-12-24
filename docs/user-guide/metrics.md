@@ -51,25 +51,32 @@ app.Run();
 
 ```
 # TYPE experiment_invocations_total counter
-experiment_invocations_total{experiment="IDatabase",trial="cloud",method="GetDataAsync",outcome="success"} 1523
+experiment_invocations_total{service="IDatabase",trial_key="cloud",method="GetDataAsync"} 1523
+
+# TYPE experiment_success_total counter
+experiment_success_total{service="IDatabase",trial_key="cloud",method="GetDataAsync"} 1478
+
+# TYPE experiment_errors_total counter
+experiment_errors_total{service="IDatabase",trial_key="cloud",method="GetDataAsync"} 45
 
 # TYPE experiment_duration_seconds histogram
-experiment_duration_seconds_sum{experiment="IDatabase",trial="cloud",method="GetDataAsync"} 45.234
-experiment_duration_seconds_count{experiment="IDatabase",trial="cloud",method="GetDataAsync"} 1523
+experiment_duration_seconds_sum{service="IDatabase",trial_key="cloud",method="GetDataAsync"} 45.234
+experiment_duration_seconds_count{service="IDatabase",trial_key="cloud",method="GetDataAsync"} 1523
 ```
 
 ### Collected Metrics
 
 | Metric | Type | Description | Tags |
 |--------|------|-------------|------|
-| `experiment_invocations_total` | Counter | Total number of invocations | `experiment`, `trial`, `method`, `outcome` |
-| `experiment_duration_seconds` | Histogram | Duration of invocations | `experiment`, `trial`, `method` |
+| `experiment_invocations_total` | Counter | Total number of invocations | `service`, `trial_key`, `method` |
+| `experiment_success_total` | Counter | Total number of successful invocations | `service`, `trial_key`, `method` |
+| `experiment_errors_total` | Counter | Total number of failed invocations | `service`, `trial_key`, `method` |
+| `experiment_duration_seconds` | Histogram | Duration of invocations | `service`, `trial_key`, `method` |
 
 **Tags:**
-- `experiment`: Service interface name (e.g., "IDatabase")
-- `trial`: Trial key (e.g., "cloud", "local")
+- `service`: Service interface name (e.g., "IDatabase")
+- `trial_key`: Trial key (e.g., "cloud", "local")
 - `method`: Method name (e.g., "GetDataAsync")
-- `outcome`: "success" or "failure"
 
 ## OpenTelemetry Exporter
 

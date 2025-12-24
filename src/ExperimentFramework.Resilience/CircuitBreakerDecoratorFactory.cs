@@ -15,9 +15,9 @@ public sealed class CircuitBreakerDecoratorFactory : IExperimentDecoratorFactory
 
     public CircuitBreakerDecoratorFactory(CircuitBreakerOptions options, ILoggerFactory? loggerFactory = null)
     {
-        var opts = options ?? throw new ArgumentNullException(nameof(options));
+        if (options is null) throw new ArgumentNullException(nameof(options));
         var logger = loggerFactory?.CreateLogger("ExperimentFramework.CircuitBreaker");
-        _decorator = new CircuitBreakerDecorator(opts, logger);
+        _decorator = new CircuitBreakerDecorator(options, logger);
     }
 
     public IExperimentDecorator Create(IServiceProvider serviceProvider)
@@ -92,19 +92,11 @@ public sealed class CircuitBreakerDecoratorFactory : IExperimentDecoratorFactory
                     context.MethodName,
                     context.TrialKey);
 
-                // Handle based on configured action
-                if (_options.OnCircuitOpen == CircuitBreakerAction.ThrowException)
-                {
-                    throw new CircuitBreakerOpenException(
-                        $"Circuit breaker is open for trial '{context.TrialKey}' of {context.ServiceType.Name}.{context.MethodName}",
-                        ex);
-                }
-                else
-                {
-                    // For FallbackToDefault or FallbackToSpecificTrial, rethrow
-                    // The error policy in the experiment framework will handle the fallback
-                    throw;
-                }
+                // Wrap in domain exception for better error messages
+                // The error policy in RuntimeExperimentProxy handles retry based on OnErrorPolicy
+                throw new CircuitBreakerOpenException(
+                    $"Circuit breaker is open for trial '{context.TrialKey}' of {context.ServiceType.Name}.{context.MethodName}",
+                    ex);
             }
         }
     }
