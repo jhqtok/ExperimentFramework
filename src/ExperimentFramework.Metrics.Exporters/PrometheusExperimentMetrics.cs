@@ -1,4 +1,3 @@
-using ExperimentFramework.Metrics;
 using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text;
@@ -21,7 +20,11 @@ public sealed class PrometheusExperimentMetrics : IExperimentMetrics
         var key = BuildKey(name, tags);
         _counters.AddOrUpdate(key,
             _ => new CounterMetric(name, tags, value),
-            (_, existing) => { existing.Add(value); return existing; });
+            (_, existing) =>
+            {
+                existing.Add(value);
+                return existing;
+            });
     }
 
     public void RecordHistogram(string name, double value, params KeyValuePair<string, object>[] tags)
@@ -29,7 +32,11 @@ public sealed class PrometheusExperimentMetrics : IExperimentMetrics
         var key = BuildKey(name, tags);
         _histograms.AddOrUpdate(key,
             _ => new HistogramMetric(name, tags, value),
-            (_, existing) => { existing.Record(value); return existing; });
+            (_, existing) =>
+            {
+                existing.Record(value);
+                return existing;
+            });
     }
 
     public void SetGauge(string name, double value, params KeyValuePair<string, object>[] tags)
@@ -37,7 +44,11 @@ public sealed class PrometheusExperimentMetrics : IExperimentMetrics
         var key = BuildKey(name, tags);
         _gauges.AddOrUpdate(key,
             _ => new GaugeMetric(name, tags, value),
-            (_, existing) => { existing.Set(value); return existing; });
+            (_, existing) =>
+            {
+                existing.Set(value);
+                return existing;
+            });
     }
 
     public void RecordSummary(string name, double value, params KeyValuePair<string, object>[] tags)
@@ -45,7 +56,11 @@ public sealed class PrometheusExperimentMetrics : IExperimentMetrics
         var key = BuildKey(name, tags);
         _summaries.AddOrUpdate(key,
             _ => new SummaryMetric(name, tags, value),
-            (_, existing) => { existing.Record(value); return existing; });
+            (_, existing) =>
+            {
+                existing.Record(value);
+                return existing;
+            });
     }
 
     /// <summary>
@@ -53,44 +68,44 @@ public sealed class PrometheusExperimentMetrics : IExperimentMetrics
     /// </summary>
     public string GeneratePrometheusOutput()
     {
-        var sb = new StringBuilder();
+        var counterLines = _counters
+            .SelectMany(kvp => new[]
+            {
+                $"# TYPE {kvp.Value.Name} counter",
+                $"{kvp.Value.Name}{FormatTags(kvp.Value.Tags)} {kvp.Value.Value}"
+            });
 
-        // Counters
-        foreach (var kvp in _counters)
-        {
-            var metric = kvp.Value;
-            sb.AppendLine($"# TYPE {metric.Name} counter");
-            sb.AppendLine($"{metric.Name}{FormatTags(metric.Tags)} {metric.Value}");
-        }
+        var gaugeLines = _gauges
+            .SelectMany(kvp => new[]
+            {
+                $"# TYPE {kvp.Value.Name} gauge",
+                $"{kvp.Value.Name}{FormatTags(kvp.Value.Tags)} {kvp.Value.Value}"
+            });
 
-        // Gauges
-        foreach (var kvp in _gauges)
-        {
-            var metric = kvp.Value;
-            sb.AppendLine($"# TYPE {metric.Name} gauge");
-            sb.AppendLine($"{metric.Name}{FormatTags(metric.Tags)} {metric.Value}");
-        }
+        var histogramLines = _histograms
+            .SelectMany(kvp => new[]
+            {
+                $"# TYPE {kvp.Value.Name} histogram",
+                $"{kvp.Value.Name}_sum{FormatTags(kvp.Value.Tags)} {kvp.Value.Sum.ToString(CultureInfo.InvariantCulture)}",
+                $"{kvp.Value.Name}_count{FormatTags(kvp.Value.Tags)} {kvp.Value.Count}"
+            });
 
-        // Histograms
-        foreach (var kvp in _histograms)
-        {
-            var metric = kvp.Value;
-            sb.AppendLine($"# TYPE {metric.Name} histogram");
-            sb.AppendLine($"{metric.Name}_sum{FormatTags(metric.Tags)} {metric.Sum.ToString(CultureInfo.InvariantCulture)}");
-            sb.AppendLine($"{metric.Name}_count{FormatTags(metric.Tags)} {metric.Count}");
-        }
+        var summaryLines = _summaries
+            .SelectMany(kvp => new[]
+            {
+                $"# TYPE {kvp.Value.Name} summary",
+                $"{kvp.Value.Name}_sum{FormatTags(kvp.Value.Tags)} {kvp.Value.Sum.ToString(CultureInfo.InvariantCulture)}",
+                $"{kvp.Value.Name}_count{FormatTags(kvp.Value.Tags)} {kvp.Value.Count}"
+            });
 
-        // Summaries
-        foreach (var kvp in _summaries)
-        {
-            var metric = kvp.Value;
-            sb.AppendLine($"# TYPE {metric.Name} summary");
-            sb.AppendLine($"{metric.Name}_sum{FormatTags(metric.Tags)} {metric.Sum.ToString(CultureInfo.InvariantCulture)}");
-            sb.AppendLine($"{metric.Name}_count{FormatTags(metric.Tags)} {metric.Count}");
-        }
-
-        return sb.ToString();
+        return string.Join(
+            Environment.NewLine,
+                   counterLines
+                       .Concat(gaugeLines)
+                       .Concat(histogramLines)
+                       .Concat(summaryLines)) ;
     }
+
 
     /// <summary>
     /// Clears all collected metrics.
@@ -116,6 +131,7 @@ public sealed class PrometheusExperimentMetrics : IExperimentMetrics
             sb.Append('=');
             sb.Append(tag.Value);
         }
+
         return sb.ToString();
     }
 
@@ -125,7 +141,7 @@ public sealed class PrometheusExperimentMetrics : IExperimentMetrics
             return string.Empty;
 
         var sb = new StringBuilder("{");
-        for (int i = 0; i < tags.Length; i++)
+        for (var i = 0; i < tags.Length; i++)
         {
             if (i > 0)
                 sb.Append(',');
@@ -134,17 +150,16 @@ public sealed class PrometheusExperimentMetrics : IExperimentMetrics
             sb.Append(EscapePrometheusValue(tags[i].Value?.ToString() ?? ""));
             sb.Append('"');
         }
+
         sb.Append('}');
         return sb.ToString();
     }
 
     private static string EscapePrometheusValue(string value)
-    {
-        return value
+        => value
             .Replace("\\", "\\\\")
             .Replace("\"", "\\\"")
             .Replace("\n", "\\n");
-    }
 
     private sealed class CounterMetric
     {

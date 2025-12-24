@@ -50,19 +50,19 @@ public sealed class CircuitBreakerDecoratorFactory : IExperimentDecoratorFactory
                 SamplingDuration = options.SamplingDuration,
                 BreakDuration = options.BreakDuration,
                 ShouldHandle = new PredicateBuilder().Handle<Exception>(),
-                OnOpened = args =>
+                OnOpened = _ =>
                 {
                     logger?.LogWarning(
                         "Circuit breaker opened after failure ratio {FailureRatio:P} exceeded threshold",
                         failureRatio);
                     return default;
                 },
-                OnClosed = args =>
+                OnClosed = _ =>
                 {
                     logger?.LogInformation("Circuit breaker closed - normal operation resumed");
                     return default;
                 },
-                OnHalfOpened = args =>
+                OnHalfOpened = _ =>
                 {
                     logger?.LogInformation("Circuit breaker half-open - testing recovery");
                     return default;
@@ -79,7 +79,7 @@ public sealed class CircuitBreakerDecoratorFactory : IExperimentDecoratorFactory
             try
             {
                 // Execute through Polly circuit breaker
-                return await _pipeline.ExecuteAsync(async ct =>
+                return await _pipeline.ExecuteAsync(async _ =>
                 {
                     return await next();
                 }, CancellationToken.None);

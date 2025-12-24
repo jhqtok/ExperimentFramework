@@ -63,7 +63,7 @@ public sealed class VariantAndTelemetryTests(ITestOutputHelper output) : TinyBdd
         using var listener = new ActivityListener
         {
             ShouldListenTo = source => source.Name == "ExperimentFramework",
-            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+            Sample = (ref _) => ActivitySamplingResult.AllData,
             ActivityStarted = activity => capturedActivity = activity
         };
         ActivitySource.AddActivityListener(listener);
@@ -92,7 +92,7 @@ public sealed class VariantAndTelemetryTests(ITestOutputHelper output) : TinyBdd
         using var listener = new ActivityListener
         {
             ShouldListenTo = source => source.Name == "ExperimentFramework",
-            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+            Sample = (ref _) => ActivitySamplingResult.AllData,
             ActivityStarted = activity => capturedActivity = activity
         };
         ActivitySource.AddActivityListener(listener);
@@ -167,7 +167,7 @@ public sealed class VariantAndTelemetryTests(ITestOutputHelper output) : TinyBdd
         using var listener = new ActivityListener
         {
             ShouldListenTo = source => source.Name == "ExperimentFramework",
-            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+            Sample = (ref _) => ActivitySamplingResult.AllData,
             ActivityStarted = activity => capturedActivity = activity
         };
         ActivitySource.AddActivityListener(listener);

@@ -340,7 +340,7 @@ public sealed class EnterpriseFeatureTests
         var service = sp.GetRequiredService<IFailingService>();
 
         // Make 5 failing calls with small delays to build up failure history
-        for (int i = 0; i < 5; i++)
+        for (var i = 0; i < 5; i++)
         {
             try
             {
