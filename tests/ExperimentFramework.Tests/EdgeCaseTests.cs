@@ -1,11 +1,14 @@
+using ExperimentFramework.Decorators;
+using ExperimentFramework.StickyRouting;
+using ExperimentFramework.Telemetry;
+using ExperimentFramework.Tests.TestInterfaces;
+using ExperimentFramework.Validation;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.FeatureManagement;
 using TinyBDD;
 using TinyBDD.Xunit;
 using Xunit.Abstractions;
-using ExperimentFramework.Tests.TestInterfaces;
-using ExperimentFramework.Routing;
 
 namespace ExperimentFramework.Tests;
 
@@ -151,7 +154,7 @@ public sealed class EdgeCaseTests(ITestOutputHelper output) : TinyBddXunitBase(o
     public void StickyTrialRouter_throws_when_no_trial_keys()
     {
         var ex = Assert.Throws<InvalidOperationException>(() =>
-            StickyTrialRouter.SelectTrial("user123", "experiment", Array.Empty<string>()));
+            StickyTrialRouter.SelectTrial("user123", "experiment", []));
 
         Assert.Contains("No trial keys available", ex.Message);
     }
@@ -160,7 +163,7 @@ public sealed class EdgeCaseTests(ITestOutputHelper output) : TinyBddXunitBase(o
     [Fact]
     public void StickyTrialRouter_handles_single_trial()
     {
-        var result = StickyTrialRouter.SelectTrial("user123", "experiment", new[] { "only-trial" });
+        var result = StickyTrialRouter.SelectTrial("user123", "experiment", ["only-trial"]);
 
         Assert.Equal("only-trial", result);
     }
@@ -282,10 +285,10 @@ public sealed class EdgeCaseTests(ITestOutputHelper output) : TinyBddXunitBase(o
         services.AddOpenTelemetryExperimentTracking();
 
         var sp = services.BuildServiceProvider();
-        var telemetry = sp.GetRequiredService<ExperimentFramework.Telemetry.IExperimentTelemetry>();
+        var telemetry = sp.GetRequiredService<IExperimentTelemetry>();
 
         Assert.NotNull(telemetry);
-        Assert.IsType<ExperimentFramework.Telemetry.OpenTelemetryExperimentTelemetry>(telemetry);
+        Assert.IsType<OpenTelemetryExperimentTelemetry>(telemetry);
 
         sp.Dispose();
     }
@@ -294,14 +297,14 @@ public sealed class EdgeCaseTests(ITestOutputHelper output) : TinyBddXunitBase(o
     [Fact]
     public void NoopExperimentTelemetry_works()
     {
-        var telemetry = ExperimentFramework.Telemetry.NoopExperimentTelemetry.Instance;
+        var telemetry = NoopExperimentTelemetry.Instance;
 
         var scope = telemetry.StartInvocation(
             typeof(ITestService),
             "Execute",
             "test",
             "control",
-            new[] { "control", "variant" });
+            ["control", "variant"]);
 
         scope.RecordSuccess();
         scope.RecordFailure(new Exception("test"));
@@ -355,7 +358,7 @@ public sealed class EdgeCaseTests(ITestOutputHelper output) : TinyBddXunitBase(o
     public void AddDecoratorFactory_registers_decorator()
     {
         var builder = ExperimentFrameworkBuilder.Create();
-        var decoratorFactory = new ExperimentFramework.Decorators.BenchmarkDecoratorFactory();
+        var decoratorFactory = new BenchmarkDecoratorFactory();
 
         var result = builder.AddDecoratorFactory(decoratorFactory);
 
@@ -410,4 +413,86 @@ public interface INonExistentTestService
 public class NonExistentServiceImpl : INonExistentTestService
 {
     public string Execute() => "NonExistent";
+}
+
+/// <summary>
+/// Tests for TrialConflictException.
+/// </summary>
+public sealed class TrialConflictExceptionTests
+{
+    [Fact]
+    public void TrialConflictException_with_single_conflict()
+    {
+        var conflict = new TrialConflict
+        {
+            Type = TrialConflictType.DuplicateServiceRegistration,
+            ServiceType = typeof(TestInterfaces.ITestService),
+            Description = "Duplicate registration for ITestService with variant-a"
+        };
+
+        var exception = new TrialConflictException(conflict);
+
+        Assert.Contains("ITestService", exception.Message);
+        Assert.Contains("variant-a", exception.Message);
+        Assert.Single(exception.Conflicts);
+    }
+
+    [Fact]
+    public void TrialConflictException_with_multiple_conflicts()
+    {
+        var conflicts = new List<TrialConflict>
+        {
+            new TrialConflict
+            {
+                Type = TrialConflictType.DuplicateServiceRegistration,
+                ServiceType = typeof(TestInterfaces.ITestService),
+                Description = "Duplicate registration for ITestService"
+            },
+            new TrialConflict
+            {
+                Type = TrialConflictType.OverlappingTimeWindows,
+                ServiceType = typeof(TestInterfaces.IDatabase),
+                Description = "Overlapping time windows for IDatabase"
+            }
+        };
+
+        var exception = new TrialConflictException(conflicts);
+
+        Assert.Contains("ITestService", exception.Message);
+        Assert.Contains("IDatabase", exception.Message);
+        Assert.Equal(2, exception.Conflicts.Count);
+    }
+
+    [Fact]
+    public void TrialConflictException_throws_when_null_list()
+    {
+        Assert.Throws<ArgumentNullException>(() =>
+            new TrialConflictException((IReadOnlyList<TrialConflict>)null!));
+    }
+
+    [Fact]
+    public void TrialConflict_has_all_properties()
+    {
+        var conflict = new TrialConflict
+        {
+            Type = TrialConflictType.InvalidFallbackKey,
+            ServiceType = typeof(TestInterfaces.IDatabase),
+            Description = "Invalid fallback key 'cloud' for IDatabase",
+            ExperimentNames = new[] { "exp1", "exp2" }
+        };
+
+        Assert.Equal(typeof(TestInterfaces.IDatabase), conflict.ServiceType);
+        Assert.Equal(TrialConflictType.InvalidFallbackKey, conflict.Type);
+        Assert.Contains("cloud", conflict.Description);
+        Assert.Equal(2, conflict.ExperimentNames!.Count);
+    }
+
+    [Fact]
+    public void TrialConflictType_has_expected_values()
+    {
+        Assert.Equal(0, (int)TrialConflictType.OverlappingTimeWindows);
+        Assert.Equal(1, (int)TrialConflictType.ExcessivePercentageAllocation);
+        Assert.Equal(2, (int)TrialConflictType.DuplicateServiceRegistration);
+        Assert.Equal(3, (int)TrialConflictType.InvalidFallbackKey);
+    }
 }

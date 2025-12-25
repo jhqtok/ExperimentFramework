@@ -1,5 +1,6 @@
 using ExperimentFramework.Decorators;
 using ExperimentFramework.Models;
+using ExperimentFramework.Selection;
 using ExperimentFramework.Telemetry;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -95,6 +96,7 @@ public sealed class RuntimeExperimentProxyTests(ITestOutputHelper output) : Tiny
             {
                 ServiceType = typeof(ITestService),
                 Mode = SelectionMode.ConfigurationValue,
+                ModeIdentifier = SelectionModes.ConfigurationValue,
                 SelectorName = "TestKey",
                 Trials = new Dictionary<string, Type>
                 {
@@ -108,7 +110,7 @@ public sealed class RuntimeExperimentProxyTests(ITestOutputHelper output) : Tiny
             var proxy = RuntimeExperimentProxy<ITestService>.Create(
                 sp.GetRequiredService<IServiceScopeFactory>(),
                 registration,
-                Array.Empty<IExperimentDecoratorFactory>(),
+                [],
                 sp.GetRequiredService<IExperimentTelemetry>());
 
             return new TestContext(sp, proxy);
@@ -147,6 +149,7 @@ public sealed class RuntimeExperimentProxyTests(ITestOutputHelper output) : Tiny
             {
                 ServiceType = typeof(ITestService),
                 Mode = SelectionMode.ConfigurationValue,
+                ModeIdentifier = SelectionModes.ConfigurationValue,
                 SelectorName = "TestKey",
                 Trials = new Dictionary<string, Type>
                 {
@@ -160,7 +163,7 @@ public sealed class RuntimeExperimentProxyTests(ITestOutputHelper output) : Tiny
             var proxy = RuntimeExperimentProxy<ITestService>.Create(
                 sp.GetRequiredService<IServiceScopeFactory>(),
                 registration,
-                Array.Empty<IExperimentDecoratorFactory>(),
+                [],
                 sp.GetRequiredService<IExperimentTelemetry>());
 
             return new TestContext(sp, proxy);
@@ -199,6 +202,7 @@ public sealed class RuntimeExperimentProxyTests(ITestOutputHelper output) : Tiny
             {
                 ServiceType = typeof(ITestService),
                 Mode = SelectionMode.ConfigurationValue,
+                ModeIdentifier = SelectionModes.ConfigurationValue,
                 SelectorName = "TestKey",
                 Trials = new Dictionary<string, Type>
                 {
@@ -212,7 +216,7 @@ public sealed class RuntimeExperimentProxyTests(ITestOutputHelper output) : Tiny
             var proxy = RuntimeExperimentProxy<ITestService>.Create(
                 sp.GetRequiredService<IServiceScopeFactory>(),
                 registration,
-                Array.Empty<IExperimentDecoratorFactory>(),
+                [],
                 sp.GetRequiredService<IExperimentTelemetry>());
 
             return new TestContext(sp, proxy);
@@ -250,6 +254,7 @@ public sealed class RuntimeExperimentProxyTests(ITestOutputHelper output) : Tiny
             {
                 ServiceType = typeof(ITestService),
                 Mode = SelectionMode.ConfigurationValue,
+                ModeIdentifier = SelectionModes.ConfigurationValue,
                 SelectorName = "TestKey",
                 Trials = new Dictionary<string, Type>
                 {
@@ -262,7 +267,7 @@ public sealed class RuntimeExperimentProxyTests(ITestOutputHelper output) : Tiny
             var proxy = RuntimeExperimentProxy<ITestService>.Create(
                 sp.GetRequiredService<IServiceScopeFactory>(),
                 registration,
-                Array.Empty<IExperimentDecoratorFactory>(),
+                [],
                 sp.GetRequiredService<IExperimentTelemetry>());
 
             return new TestContext(sp, proxy);
@@ -300,6 +305,7 @@ public sealed class RuntimeExperimentProxyTests(ITestOutputHelper output) : Tiny
             {
                 ServiceType = typeof(ITestService),
                 Mode = SelectionMode.ConfigurationValue,
+                ModeIdentifier = SelectionModes.ConfigurationValue,
                 SelectorName = "TestKey",
                 Trials = new Dictionary<string, Type>
                 {
@@ -312,7 +318,7 @@ public sealed class RuntimeExperimentProxyTests(ITestOutputHelper output) : Tiny
             var proxy = RuntimeExperimentProxy<ITestService>.Create(
                 sp.GetRequiredService<IServiceScopeFactory>(),
                 registration,
-                Array.Empty<IExperimentDecoratorFactory>(),
+                [],
                 sp.GetRequiredService<IExperimentTelemetry>());
 
             return new TestContext(sp, proxy);
@@ -352,6 +358,7 @@ public sealed class RuntimeExperimentProxyTests(ITestOutputHelper output) : Tiny
             {
                 ServiceType = typeof(ITestService),
                 Mode = SelectionMode.BooleanFeatureFlag,
+                ModeIdentifier = SelectionModes.BooleanFeatureFlag,
                 SelectorName = "UseServiceB",
                 Trials = new Dictionary<string, Type>
                 {
@@ -365,7 +372,7 @@ public sealed class RuntimeExperimentProxyTests(ITestOutputHelper output) : Tiny
             var proxy = RuntimeExperimentProxy<ITestService>.Create(
                 sp.GetRequiredService<IServiceScopeFactory>(),
                 registration,
-                Array.Empty<IExperimentDecoratorFactory>(),
+                [],
                 sp.GetRequiredService<IExperimentTelemetry>());
 
             return new TestContext(sp, proxy);
@@ -403,6 +410,7 @@ public sealed class RuntimeExperimentProxyTests(ITestOutputHelper output) : Tiny
             {
                 ServiceType = typeof(ITestService),
                 Mode = SelectionMode.ConfigurationValue,
+                ModeIdentifier = SelectionModes.ConfigurationValue,
                 SelectorName = "TestKey",
                 Trials = new Dictionary<string, Type>
                 {
@@ -415,7 +423,7 @@ public sealed class RuntimeExperimentProxyTests(ITestOutputHelper output) : Tiny
             var proxy = RuntimeExperimentProxy<ITestService>.Create(
                 sp.GetRequiredService<IServiceScopeFactory>(),
                 registration,
-                Array.Empty<IExperimentDecoratorFactory>(),
+                [],
                 sp.GetRequiredService<IExperimentTelemetry>());
 
             return new TestContext(sp, proxy);
@@ -462,6 +470,7 @@ public sealed class RuntimeExperimentProxyTests(ITestOutputHelper output) : Tiny
             {
                 ServiceType = typeof(ITestService),
                 Mode = SelectionMode.ConfigurationValue,
+                ModeIdentifier = SelectionModes.ConfigurationValue,
                 SelectorName = "TestKey",
                 Trials = new Dictionary<string, Type>
                 {
@@ -475,7 +484,7 @@ public sealed class RuntimeExperimentProxyTests(ITestOutputHelper output) : Tiny
             var proxy = RuntimeExperimentProxy<ITestService>.Create(
                 sp.GetRequiredService<IServiceScopeFactory>(),
                 registration,
-                Array.Empty<IExperimentDecoratorFactory>(),
+                [],
                 sp.GetRequiredService<IExperimentTelemetry>());
 
             return new TestContext(sp, proxy);
@@ -514,6 +523,7 @@ public sealed class RuntimeExperimentProxyTests(ITestOutputHelper output) : Tiny
             {
                 ServiceType = typeof(ITestService),
                 Mode = SelectionMode.ConfigurationValue,
+                ModeIdentifier = SelectionModes.ConfigurationValue,
                 SelectorName = "TestKey",
                 Trials = new Dictionary<string, Type>
                 {
@@ -527,7 +537,7 @@ public sealed class RuntimeExperimentProxyTests(ITestOutputHelper output) : Tiny
             var proxy = RuntimeExperimentProxy<ITestService>.Create(
                 sp.GetRequiredService<IServiceScopeFactory>(),
                 registration,
-                Array.Empty<IExperimentDecoratorFactory>(),
+                [],
                 sp.GetRequiredService<IExperimentTelemetry>());
 
             return new TestContext(sp, proxy);
@@ -565,6 +575,7 @@ public sealed class RuntimeExperimentProxyTests(ITestOutputHelper output) : Tiny
             {
                 ServiceType = typeof(ITestService),
                 Mode = SelectionMode.ConfigurationValue,
+                ModeIdentifier = SelectionModes.ConfigurationValue,
                 SelectorName = "TestKey",
                 Trials = new Dictionary<string, Type>
                 {
@@ -577,7 +588,7 @@ public sealed class RuntimeExperimentProxyTests(ITestOutputHelper output) : Tiny
             var proxy = RuntimeExperimentProxy<ITestService>.Create(
                 sp.GetRequiredService<IServiceScopeFactory>(),
                 registration,
-                Array.Empty<IExperimentDecoratorFactory>(),
+                [],
                 sp.GetRequiredService<IExperimentTelemetry>());
 
             return new TestContext(sp, proxy);
@@ -599,4 +610,158 @@ public sealed class RuntimeExperimentProxyTests(ITestOutputHelper output) : Tiny
         .Then("all invocations complete successfully", r => r.Item2)
         .Finally(r => (r.Item1.ServiceProvider as ServiceProvider)?.Dispose())
         .AssertPassed();
+}
+
+/// <summary>
+/// Tests for RuntimeExperimentProxy edge cases.
+/// </summary>
+public sealed class RuntimeExperimentProxyEdgeCaseTests
+{
+    private static void RegisterTestServices(IServiceCollection services)
+    {
+        services.AddScoped<TestInterfaces.LocalDatabase>();
+        services.AddScoped<TestInterfaces.CloudDatabase>();
+        services.AddScoped<TestInterfaces.IDatabase, TestInterfaces.LocalDatabase>();
+    }
+
+    [Fact]
+    public void RuntimeExperimentProxy_ToString_returns_proxy_info()
+    {
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["FeatureManagement:TestFeature"] = "false"
+            })
+            .Build();
+
+        var services = new ServiceCollection();
+        services.AddSingleton<IConfiguration>(config);
+        services.AddFeatureManagement();
+        RegisterTestServices(services);
+
+        var builder = ExperimentFrameworkBuilder.Create()
+            .Trial<TestInterfaces.IDatabase>(t => t
+                .UsingFeatureFlag("TestFeature")
+                .AddControl<TestInterfaces.LocalDatabase>()
+                .AddCondition<TestInterfaces.CloudDatabase>("true"))
+            .UseDispatchProxy();
+
+        services.AddExperimentFramework(builder);
+        var sp = services.BuildServiceProvider();
+
+        using var scope = sp.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<TestInterfaces.IDatabase>();
+
+        // Call ToString on proxy - exercises the object method handling
+        var result = db.ToString();
+        Assert.NotNull(result);
+    }
+
+    [Fact]
+    public void RuntimeExperimentProxy_GetHashCode_returns_value()
+    {
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["FeatureManagement:TestFeature"] = "false"
+            })
+            .Build();
+
+        var services = new ServiceCollection();
+        services.AddSingleton<IConfiguration>(config);
+        services.AddFeatureManagement();
+        RegisterTestServices(services);
+
+        var builder = ExperimentFrameworkBuilder.Create()
+            .Trial<TestInterfaces.IDatabase>(t => t
+                .UsingFeatureFlag("TestFeature")
+                .AddControl<TestInterfaces.LocalDatabase>()
+                .AddCondition<TestInterfaces.CloudDatabase>("true"))
+            .UseDispatchProxy();
+
+        services.AddExperimentFramework(builder);
+        var sp = services.BuildServiceProvider();
+
+        using var scope = sp.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<TestInterfaces.IDatabase>();
+
+        // Call GetHashCode on proxy - exercises the object method handling
+        var hash = db.GetHashCode();
+        Assert.NotEqual(0, hash);
+    }
+
+    [Fact]
+    public void RuntimeExperimentProxy_Equals_works()
+    {
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["FeatureManagement:TestFeature"] = "false"
+            })
+            .Build();
+
+        var services = new ServiceCollection();
+        services.AddSingleton<IConfiguration>(config);
+        services.AddFeatureManagement();
+        RegisterTestServices(services);
+
+        var builder = ExperimentFrameworkBuilder.Create()
+            .Trial<TestInterfaces.IDatabase>(t => t
+                .UsingFeatureFlag("TestFeature")
+                .AddControl<TestInterfaces.LocalDatabase>()
+                .AddCondition<TestInterfaces.CloudDatabase>("true"))
+            .UseDispatchProxy();
+
+        services.AddExperimentFramework(builder);
+        var sp = services.BuildServiceProvider();
+
+        using var scope1 = sp.CreateScope();
+        using var scope2 = sp.CreateScope();
+        var db1 = scope1.ServiceProvider.GetRequiredService<TestInterfaces.IDatabase>();
+        var db2 = scope2.ServiceProvider.GetRequiredService<TestInterfaces.IDatabase>();
+
+        // Verify null is handled gracefully without throwing
+        Assert.False(db1.Equals((object?)null));
+
+        // Verify comparing to a different object type returns false
+        Assert.False(db1.Equals("not a database"));
+        Assert.False(db1.Equals(42));
+
+        // Verify the proxy correctly reports its type
+        Assert.True(db1 is TestInterfaces.IDatabase);
+
+        // Verify the proxy is functional - both proxies select the same trial
+        Assert.Equal(db1.GetName(), db2.GetName());
+    }
+
+    [Fact]
+    public void RuntimeExperimentProxy_with_no_selector_name_uses_default()
+    {
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["FeatureManagement:Database"] = "false"
+            })
+            .Build();
+
+        var services = new ServiceCollection();
+        services.AddSingleton<IConfiguration>(config);
+        services.AddFeatureManagement();
+        RegisterTestServices(services);
+
+        var builder = ExperimentFrameworkBuilder.Create()
+            .Trial<TestInterfaces.IDatabase>(t => t
+                .UsingFeatureFlag() // No selector name - uses convention
+                .AddControl<TestInterfaces.LocalDatabase>()
+                .AddCondition<TestInterfaces.CloudDatabase>("true"))
+            .UseDispatchProxy();
+
+        services.AddExperimentFramework(builder);
+        var sp = services.BuildServiceProvider();
+
+        using var scope = sp.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<TestInterfaces.IDatabase>();
+
+        Assert.Equal("LocalDatabase", db.GetName());
+    }
 }

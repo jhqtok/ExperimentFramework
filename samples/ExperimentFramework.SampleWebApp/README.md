@@ -1,10 +1,18 @@
 # ExperimentFramework Web Application Sample
 
 This sample demonstrates using the ExperimentFramework in an ASP.NET Core web application with:
-- **Sticky A/B testing** for consistent user experiences across sessions
+- **Sticky A/B testing** for consistent user experiences across sessions (requires `ExperimentFramework.StickyRouting` package)
 - **Fluent API source generation** using `.UseSourceGenerators()`
 - **Session-based routing** for anonymous users
 - **Feature flag experiments** for gradual rollouts
+
+## Prerequisites
+
+This sample requires the sticky routing extension package:
+
+```bash
+dotnet add package ExperimentFramework.StickyRouting
+```
 
 ## Running the Sample
 
@@ -82,20 +90,29 @@ curl -X POST https://localhost:5001/api/checkout/complete \
 
 This sample uses **`.UseSourceGenerators()`** to trigger compile-time proxy generation.
 
+**Program.cs (Provider Registration):**
+```csharp
+// Register sticky routing provider (from ExperimentFramework.StickyRouting package)
+builder.Services.AddExperimentStickyRouting();
+
+// Register identity provider for sticky routing
+builder.Services.AddScoped<IExperimentIdentityProvider, SessionIdentityProvider>();
+```
+
 **Configuration (ExperimentConfiguration.cs):**
 ```csharp
 public static ExperimentFrameworkBuilder ConfigureWebExperiments()
 {
     return ExperimentFrameworkBuilder.Create()
-        .Define<IRecommendationEngine>(c => c
-            .UsingStickyRouting()
-            .AddDefaultTrial<PopularityRecommendationEngine>("control")
-            .AddTrial<MLRecommendationEngine>("ml")
-            .AddTrial<CollaborativeRecommendationEngine>("collaborative"))
-        .Define<ICheckoutFlow>(c => c
+        .Trial<IRecommendationEngine>(t => t
+            .UsingCustomMode("StickyRouting")  // Uses sticky routing via custom mode
+            .AddControl<PopularityRecommendationEngine>("control")
+            .AddVariant<MLRecommendationEngine>("ml")
+            .AddVariant<CollaborativeRecommendationEngine>("collaborative"))
+        .Trial<ICheckoutFlow>(t => t
             .UsingFeatureFlag("EnableExpressCheckout")
-            .AddDefaultTrial<StandardCheckoutFlow>("false")
-            .AddTrial<ExpressCheckoutFlow>("true"))
+            .AddControl<StandardCheckoutFlow>("false")
+            .AddVariant<ExpressCheckoutFlow>("true"))
         .UseSourceGenerators(); // Triggers compile-time proxy generation!
 }
 ```

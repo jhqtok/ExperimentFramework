@@ -2,14 +2,37 @@
 
 A .NET library for routing service calls through configurable trials based on feature flags, configuration values, or custom routing logic.
 
+## Fluent DSL Design
+
+ExperimentFramework provides multiple equivalent method names to create a natural, readable configuration DSL. This allows you to describe experiments using terminology that best fits your mental model:
+
+```csharp
+// Scientific terminology: Control vs Conditions
+.AddControl<BaselineImpl>()
+.AddCondition<ExperimentalImpl>("experiment")
+
+// A/B testing terminology: Control vs Variants
+.AddControl<ControlImpl>()
+.AddVariant<VariantA>("a")
+.AddVariant<VariantB>("b")
+
+// Legacy/Default terminology
+.AddDefaultTrial<DefaultImpl>("default")
+.AddTrial<AlternativeImpl>("alt")
+```
+
+All of these are functionally equivalent—use whichever reads most naturally for your scenario. The same applies to `Trial<T>()` and `Define<T>()` at the builder level.
+
 ## Features
 
 **Selection Modes**
-- Boolean feature flags (`true`/`false` keys)
-- Configuration values (string variants)
-- Variant feature flags (IVariantFeatureManager integration)
-- Sticky routing (deterministic user/session-based routing)
-- OpenFeature (open standard for feature flag management)
+- Boolean feature flags (`true`/`false` keys) - built-in
+- Configuration values (string variants) - built-in
+- Custom/extensible modes via provider architecture
+- **Optional packages:**
+  - `ExperimentFramework.FeatureManagement` - Variant feature flags (IVariantFeatureManager)
+  - `ExperimentFramework.StickyRouting` - Deterministic user/session-based routing
+  - `ExperimentFramework.OpenFeature` - OpenFeature SDK integration
 
 **Resilience**
 - Timeout enforcement with fallback
@@ -58,17 +81,17 @@ public static ExperimentFrameworkBuilder ConfigureExperiments()
 {
     return ExperimentFrameworkBuilder.Create()
         .AddLogger(l => l.AddBenchmarks().AddErrorLogging())
-        .Define<IMyDatabase>(c =>
-            c.UsingFeatureFlag("UseCloudDb")
-             .AddDefaultTrial<MyDbContext>("false")
-             .AddTrial<MyCloudDbContext>("true")
-             .OnErrorRedirectAndReplayDefault())
-        .Define<IMyTaxProvider>(c =>
-            c.UsingConfigurationKey("Experiments:TaxProvider")
-             .AddDefaultTrial<DefaultTaxProvider>("")
-             .AddTrial<OkTaxProvider>("OK")
-             .AddTrial<TxTaxProvider>("TX")
-             .OnErrorRedirectAndReplayAny());
+        .Trial<IMyDatabase>(t => t
+            .UsingFeatureFlag("UseCloudDb")
+            .AddControl<MyDbContext>()
+            .AddCondition<MyCloudDbContext>("true")
+            .OnErrorFallbackToControl())
+        .Trial<IMyTaxProvider>(t => t
+            .UsingConfigurationKey("Experiments:TaxProvider")
+            .AddControl<DefaultTaxProvider>()
+            .AddVariant<OkTaxProvider>("OK")
+            .AddVariant<TxTaxProvider>("TX")
+            .OnErrorTryAny());
 }
 
 var experiments = ConfigureExperiments();
@@ -81,11 +104,11 @@ builder.Services.AddExperimentFramework(experiments);
 public static ExperimentFrameworkBuilder ConfigureExperiments()
 {
     return ExperimentFrameworkBuilder.Create()
-        .Define<IMyDatabase>(c =>
-            c.UsingFeatureFlag("UseCloudDb")
-             .AddDefaultTrial<MyDbContext>("false")
-             .AddTrial<MyCloudDbContext>("true")
-             .OnErrorRedirectAndReplayDefault())
+        .Trial<IMyDatabase>(t => t
+            .UsingFeatureFlag("UseCloudDb")
+            .AddControl<MyDbContext>()
+            .AddCondition<MyCloudDbContext>("true")
+            .OnErrorFallbackToControl())
         .UseDispatchProxy();  // Use runtime proxies instead
 }
 
@@ -112,40 +135,65 @@ public class MyService
 
 ## Selection Modes
 
-### Boolean Feature Flag
+### Built-in Modes
+
+#### Boolean Feature Flag
 Routes based on enabled/disabled state:
 ```csharp
-c.UsingFeatureFlag("MyFeature")
- .AddDefaultTrial<DefaultImpl>("false")
- .AddTrial<ExperimentalImpl>("true")
+t.UsingFeatureFlag("MyFeature")
+ .AddControl<DefaultImpl>()
+ .AddCondition<ExperimentalImpl>("true")
 ```
 
-### Configuration Value
+#### Configuration Value
 Routes based on string configuration value:
 ```csharp
-c.UsingConfigurationKey("Experiments:ServiceName")
- .AddDefaultTrial<ControlImpl>("")
- .AddTrial<VariantA>("A")
- .AddTrial<VariantB>("B")
+t.UsingConfigurationKey("Experiments:ServiceName")
+ .AddControl<ControlImpl>()
+ .AddVariant<VariantA>("A")
+ .AddVariant<VariantB>("B")
 ```
 
-### Variant Feature Flag
-Routes based on IVariantFeatureManager (requires Microsoft.FeatureManagement package):
+### Extension Packages
+
+The framework supports additional selection modes via optional packages. Install only what you need.
+
+#### Variant Feature Flag (ExperimentFramework.FeatureManagement)
+
+Routes based on IVariantFeatureManager (Microsoft.FeatureManagement):
+
+```bash
+dotnet add package ExperimentFramework.FeatureManagement
+```
+
 ```csharp
-c.UsingVariantFeatureFlag("MyVariantFeature")
- .AddDefaultTrial<ControlImpl>("control")
- .AddTrial<VariantA>("variant-a")
- .AddTrial<VariantB>("variant-b")
+// Register the provider
+services.AddExperimentVariantFeatureFlags();
+services.AddFeatureManagement();
+
+// Configure experiment
+t.UsingVariantFeatureFlag("MyVariantFeature")
+ .AddControl<ControlImpl>()
+ .AddCondition<VariantA>("variant-a")
+ .AddCondition<VariantB>("variant-b")
 ```
 
-### Sticky Routing (A/B Testing)
+#### Sticky Routing (ExperimentFramework.StickyRouting)
+
 Deterministic routing based on user/session identity:
+
+```bash
+dotnet add package ExperimentFramework.StickyRouting
+```
+
 ```csharp
-// 1. Implement identity provider
+// 1. Register the provider
+services.AddExperimentStickyRouting();
+
+// 2. Implement and register identity provider
 public class UserIdentityProvider : IExperimentIdentityProvider
 {
     private readonly IHttpContextAccessor _accessor;
-
     public UserIdentityProvider(IHttpContextAccessor accessor) => _accessor = accessor;
 
     public bool TryGetIdentity(out string identity)
@@ -154,118 +202,157 @@ public class UserIdentityProvider : IExperimentIdentityProvider
         return !string.IsNullOrEmpty(identity);
     }
 }
-
-// 2. Register provider
-builder.Services.AddScoped<IExperimentIdentityProvider, UserIdentityProvider>();
+services.AddScoped<IExperimentIdentityProvider, UserIdentityProvider>();
 
 // 3. Configure sticky routing
-c.UsingStickyRouting()
- .AddDefaultTrial<ControlImpl>("control")
- .AddTrial<VariantA>("a")
- .AddTrial<VariantB>("b")
+t.UsingStickyRouting()
+ .AddControl<ControlImpl>()
+ .AddCondition<VariantA>("a")
+ .AddCondition<VariantB>("b")
 ```
 
-### OpenFeature
-Routes based on OpenFeature flag evaluation (works with any OpenFeature-compatible provider):
-```csharp
-// Install OpenFeature SDK and your preferred provider
-// dotnet add package OpenFeature
+#### OpenFeature (ExperimentFramework.OpenFeature)
 
-// Configure provider
+Routes based on OpenFeature flag evaluation:
+
+```bash
+dotnet add package ExperimentFramework.OpenFeature
+dotnet add package OpenFeature
+```
+
+```csharp
+// Register the provider
+services.AddExperimentOpenFeature();
+
+// Configure OpenFeature provider
 await Api.Instance.SetProviderAsync(new YourProvider());
 
 // Configure experiment
-c.UsingOpenFeature("payment-processor")
- .AddDefaultTrial<StripeProcessor>("stripe")
- .AddTrial<PayPalProcessor>("paypal")
- .AddTrial<SquareProcessor>("square")
+t.UsingOpenFeature("payment-processor")
+ .AddControl<StripeProcessor>()
+ .AddCondition<PayPalProcessor>("paypal")
+ .AddCondition<SquareProcessor>("square")
 ```
 
 See [OpenFeature Integration Guide](docs/user-guide/openfeature.md) for provider setup examples.
 
+### Custom Selection Modes
+
+Create your own selection modes with minimal boilerplate using the `[SelectionMode]` attribute:
+
+```csharp
+// 1. Create your provider (just one class!)
+[SelectionMode("Redis")]
+public class RedisSelectionProvider : SelectionModeProviderBase
+{
+    private readonly IConnectionMultiplexer _redis;
+
+    public RedisSelectionProvider(IConnectionMultiplexer redis)
+    {
+        _redis = redis;
+    }
+
+    public override async ValueTask<string?> SelectTrialKeyAsync(SelectionContext context)
+    {
+        var value = await _redis.GetDatabase().StringGetAsync(context.SelectorName);
+        return value.HasValue ? value.ToString() : null;
+    }
+}
+
+// 2. Register it (one line!)
+services.AddSelectionModeProvider<RedisSelectionProvider>();
+
+// 3. Use it
+t.UsingCustomMode("Redis", "cache:provider")
+ .AddControl<MemoryCache>()
+ .AddCondition<RedisCache>("redis")
+```
+
+No factory classes needed! See [Extensibility Guide](docs/user-guide/extensibility.md) for details.
+
 ## Error Policies
 
-Control fallback behavior when trials fail:
+Control fallback behavior when conditions fail:
 
 ### 1. Throw (Default)
 Exception propagates immediately, no retries:
 ```csharp
 // No method call needed - Throw is the default policy
-.Define<IMyService>(c => c
+.Trial<IMyService>(t => t
     .UsingFeatureFlag("MyFeature")
-    .AddDefaultTrial<DefaultImpl>("false")
-    .AddTrial<ExperimentalImpl>("true"))
+    .AddControl<DefaultImpl>()
+    .AddCondition<ExperimentalImpl>("true"))
 // If ExperimentalImpl throws, exception propagates to caller
 ```
 
-### 2. RedirectAndReplayDefault
-Falls back to default trial on error:
+### 2. FallbackToControl
+Falls back to control on error:
 ```csharp
-.Define<IMyService>(c => c
+.Trial<IMyService>(t => t
     .UsingFeatureFlag("MyFeature")
-    .AddDefaultTrial<DefaultImpl>("false")
-    .AddTrial<ExperimentalImpl>("true")
-    .OnErrorRedirectAndReplayDefault())
-// Tries: [preferred, default]
+    .AddControl<DefaultImpl>()
+    .AddCondition<ExperimentalImpl>("true")
+    .OnErrorFallbackToControl())
+// Tries: [preferred, control]
 ```
 
-### 3. RedirectAndReplayAny
-Tries all trials until one succeeds (sorted alphabetically):
+### 3. TryAny
+Tries all conditions until one succeeds (sorted alphabetically):
 ```csharp
-.Define<IMyService>(c => c
+.Trial<IMyService>(t => t
     .UsingConfigurationKey("ServiceVariant")
-    .AddDefaultTrial<DefaultImpl>("")
-    .AddTrial<VariantA>("a")
-    .AddTrial<VariantB>("b")
-    .OnErrorRedirectAndReplayAny())
+    .AddControl<DefaultImpl>()
+    .AddVariant<VariantA>("a")
+    .AddVariant<VariantB>("b")
+    .OnErrorTryAny())
 // Tries all variants in sorted order until one succeeds
 ```
 
-### 4. RedirectAndReplay
-Redirects to a specific fallback trial (e.g., Noop diagnostics handler):
+### 4. FallbackTo
+Redirects to a specific fallback condition (e.g., Noop diagnostics handler):
 ```csharp
-.Define<IMyService>(c => c
+.Trial<IMyService>(t => t
     .UsingFeatureFlag("MyFeature")
-    .AddDefaultTrial<PrimaryImpl>("true")
-    .AddTrial<SecondaryImpl>("false")
-    .AddTrial<NoopHandler>("noop")
-    .OnErrorRedirectAndReplay("noop"))
+    .AddControl<PrimaryImpl>()
+    .AddCondition<SecondaryImpl>("secondary")
+    .AddCondition<NoopHandler>("noop")
+    .OnErrorFallbackTo("noop"))
 // Tries: [preferred, specific_fallback]
 // Useful for dedicated diagnostics/safe-mode handlers
 ```
 
-### 5. RedirectAndReplayOrdered
-Tries ordered list of fallback trials:
+### 5. TryInOrder
+Tries ordered list of fallback conditions:
 ```csharp
-.Define<IMyService>(c => c
+.Trial<IMyService>(t => t
     .UsingFeatureFlag("UseCloudDb")
-    .AddDefaultTrial<CloudDbImpl>("true")
-    .AddTrial<LocalCacheImpl>("cache")
-    .AddTrial<InMemoryCacheImpl>("memory")
-    .AddTrial<StaticDataImpl>("static")
-    .OnErrorRedirectAndReplayOrdered("cache", "memory", "static"))
+    .AddControl<CloudDbImpl>()
+    .AddCondition<LocalCacheImpl>("cache")
+    .AddCondition<InMemoryCacheImpl>("memory")
+    .AddCondition<StaticDataImpl>("static")
+    .OnErrorTryInOrder("cache", "memory", "static"))
 // Tries: [preferred, cache, memory, static] in exact order
 // Fine-grained control over fallback strategy
 ```
 
 ## Timeout Enforcement
 
-Prevent slow trials from degrading system performance:
+Prevent slow conditions from degrading system performance:
 
 ```csharp
 var experiments = ExperimentFrameworkBuilder.Create()
-    .Define<IMyDatabase>(c => c
+    .Trial<IMyDatabase>(t => t
         .UsingFeatureFlag("UseCloudDb")
-        .AddDefaultTrial<LocalDb>("false")
-        .AddTrial<CloudDb>("true")
-        .OnErrorRedirectAndReplayDefault())
+        .AddControl<LocalDb>()
+        .AddCondition<CloudDb>("true")
+        .OnErrorFallbackToControl())
     .WithTimeout(TimeSpan.FromSeconds(5), TimeoutAction.FallbackToDefault)
     .UseDispatchProxy();
 ```
 
 **Actions:**
-- `TimeoutAction.ThrowException` - Throw `TimeoutException` when trial exceeds timeout
-- `TimeoutAction.FallbackToDefault` - Automatically fallback to default trial on timeout
+- `TimeoutAction.ThrowException` - Throw `TimeoutException` when condition exceeds timeout
+- `TimeoutAction.FallbackToDefault` - Automatically fallback to control on timeout
 
 See [Timeout Enforcement Guide](docs/user-guide/timeout-enforcement.md) for detailed examples.
 
@@ -279,11 +366,11 @@ dotnet add package ExperimentFramework.Resilience
 
 ```csharp
 var experiments = ExperimentFrameworkBuilder.Create()
-    .Define<IMyService>(c => c
+    .Trial<IMyService>(t => t
         .UsingFeatureFlag("UseNewService")
-        .AddDefaultTrial<StableService>("false")
-        .AddTrial<NewService>("true")
-        .OnErrorRedirectAndReplayDefault())
+        .AddControl<StableService>()
+        .AddCondition<NewService>("true")
+        .OnErrorFallbackToControl())
     .WithCircuitBreaker(options =>
     {
         options.FailureRatioThreshold = 0.5;      // Open after 50% failure rate
@@ -308,7 +395,7 @@ dotnet add package ExperimentFramework.Metrics.Exporters
 ```csharp
 var prometheusMetrics = new PrometheusExperimentMetrics();
 var experiments = ExperimentFrameworkBuilder.Create()
-    .Define<IMyService>(c => c.UsingFeatureFlag("MyFeature")...)
+    .Trial<IMyService>(t => t.UsingFeatureFlag("MyFeature")...)
     .WithMetrics(prometheusMetrics)
     .UseDispatchProxy();
 
@@ -329,13 +416,13 @@ Emergency shutdown for problematic experiments:
 var killSwitch = new InMemoryKillSwitchProvider();
 
 var experiments = ExperimentFrameworkBuilder.Create()
-    .Define<IMyDatabase>(c => c.UsingFeatureFlag("UseCloudDb")...)
+    .Trial<IMyDatabase>(t => t.UsingFeatureFlag("UseCloudDb")...)
     .WithKillSwitch(killSwitch)
     .UseDispatchProxy();
 
 // Emergency disable
 killSwitch.DisableExperiment(typeof(IMyDatabase));
-killSwitch.DisableTrial(typeof(IMyDatabase), "cloud");
+killSwitch.DisableCondition(typeof(IMyDatabase), "cloud");
 ```
 
 See [Kill Switch Guide](docs/user-guide/kill-switch.md) for distributed scenarios with Redis.
@@ -359,7 +446,7 @@ public class MyNamingConvention : IExperimentNamingConvention
 
 var experiments = ExperimentFrameworkBuilder.Create()
     .UseNamingConvention(new MyNamingConvention())
-    .Define<IMyService>(c => c.UsingFeatureFlag() /* uses convention */)
+    .Trial<IMyService>(t => t.UsingFeatureFlag() /* uses convention */)
     // ...
 ```
 
@@ -458,7 +545,7 @@ The framework supports two proxy modes:
 
 Uses Roslyn source generators to create optimized proxy classes at compile time:
 1. The `[ExperimentCompositionRoot]` attribute or `.UseSourceGenerators()` triggers the generator
-2. The generator analyzes `Define<T>()` calls to extract interface types
+2. The generator analyzes `Trial<T>()` calls to extract interface types
 3. For each interface, a proxy class is generated implementing direct method calls
 4. Generated proxies are discovered and registered automatically
 
@@ -470,7 +557,7 @@ Uses `System.Reflection.DispatchProxy` for dynamic proxies:
 
 ```csharp
 var experiments = ExperimentFrameworkBuilder.Create()
-    .Define<IMyDatabase>(c => c.UsingFeatureFlag("UseCloudDb")...)
+    .Trial<IMyDatabase>(t => t.UsingFeatureFlag("UseCloudDb")...)
     .UseDispatchProxy(); // Use runtime proxies instead of source generation
 
 builder.Services.AddExperimentFramework(experiments);
@@ -486,7 +573,7 @@ Use runtime proxies when:
 ### DI Rewriting
 When you call `AddExperimentFramework()`:
 1. Existing interface registrations are removed
-2. Concrete types remain registered (for trial resolution)
+2. Concrete types remain registered (for condition resolution)
 3. Interfaces are re-registered with source-generated proxy factories
 4. All proxies are registered as singletons and create scopes internally per invocation
 
@@ -499,10 +586,10 @@ Decorators wrap invocations in registration order:
 - Last registered = closest to actual invocation
 
 ### Sticky Routing Algorithm
-1. Sorts trial keys alphabetically (deterministic ordering)
+1. Sorts condition keys alphabetically (deterministic ordering)
 2. Hashes: `SHA256("{identity}:{selectorName}")`
-3. Maps hash to trial via modulo: `hashValue % trialCount`
-4. Same identity always routes to same trial
+3. Maps hash to condition via modulo: `hashValue % conditionCount`
+4. Same identity always routes to same condition
 
 ## Architecture
 
@@ -514,7 +601,7 @@ IMyDatabase (Proxy)
 ┌─────────────────────────────┐
 │  Telemetry Scope (Start)    │
 ├─────────────────────────────┤
-│  Trial Selection             │
+│  Condition Selection         │
 │  - Feature Flag              │
 │  - Configuration             │
 │  - Variant                   │
@@ -528,10 +615,10 @@ IMyDatabase (Proxy)
 ├─────────────────────────────┤
 │  Error Policy                │
 │  - Throw                     │
-│  - Fallback to Default       │
-│  - Try All Trials            │
+│  - Fallback to Control       │
+│  - Try All Conditions        │
 ├─────────────────────────────┤
-│  Trial Invocation            │
+│  Implementation Invocation   │
 │  MyDbContext.GetDataAsync()  │
 └─────────────────────────────┘
     ↓
@@ -646,7 +733,7 @@ All async and generic scenarios validated with comprehensive tests:
 - **Proxy Mode Selection**: You must choose between source-generated or runtime proxies:
   - Source-generated (recommended): Requires `ExperimentFramework.Generators` package + `[ExperimentCompositionRoot]` attribute or `.UseSourceGenerators()` call
   - Runtime (alternative): No extra package needed, just call `.UseDispatchProxy()` on the builder
-- Trials **must be registered by concrete type** (ImplementationType) in DI. Factory/instance registrations are not supported.
+- Implementations **must be registered by concrete type** (ImplementationType) in DI. Factory/instance registrations are not supported.
 - Source-generated proxies use direct method calls for zero-reflection overhead (<100ns per call).
 - Runtime proxies use `DispatchProxy` with reflection (~800ns per call).
 - Variant feature flag support requires reflection to access internal Microsoft.FeatureManagement APIs and may require updates for future versions.
@@ -663,23 +750,44 @@ All async and generic scenarios validated with comprehensive tests:
 | `UseNamingConvention(IExperimentNamingConvention)` | Sets custom naming convention |
 | `AddLogger(Action<ExperimentLoggingBuilder>)` | Adds logging decorators |
 | `AddDecoratorFactory(IExperimentDecoratorFactory)` | Adds custom decorator |
-| `Define<TService>(Action<ServiceExperimentBuilder<TService>>)` | Defines service experiment |
+| `Trial<TService>(Action<ServiceExperimentBuilder<TService>>)` | Defines a trial for a service interface |
+| `Experiment(string, Action<ExperimentBuilder>)` | Defines a named experiment with multiple trials |
 
-### Service Experiment Builder
+### Service Trial Builder
 
 | Method | Description |
 |--------|-------------|
-| `UsingFeatureFlag(string?)` | Boolean feature flag selection |
-| `UsingConfigurationKey(string?)` | Configuration value selection |
-| `UsingVariantFeatureFlag(string?)` | Variant feature manager selection |
-| `UsingStickyRouting(string?)` | Sticky routing selection |
-| `UsingOpenFeature(string?)` | OpenFeature flag selection |
-| `AddDefaultTrial<TImpl>(string)` | Registers default trial |
-| `AddTrial<TImpl>(string)` | Registers additional trial |
-| `OnErrorRedirectAndReplayDefault()` | Falls back to default on error |
-| `OnErrorRedirectAndReplayAny()` | Tries all trials on error |
-| `OnErrorRedirectAndReplay(string)` | Redirects to specific fallback trial on error |
-| `OnErrorRedirectAndReplayOrdered(params string[])` | Tries ordered list of fallback trials on error |
+| `UsingFeatureFlag(string?)` | Boolean feature flag selection (built-in) |
+| `UsingConfigurationKey(string?)` | Configuration value selection (built-in) |
+| `UsingCustomMode(string, string?)` | Custom selection mode (for extension packages) |
+| `AddControl<TImpl>()` | Registers the control (baseline) implementation |
+| `AddDefaultTrial<TImpl>(string)` | Registers the control implementation (alternative terminology) |
+| `AddCondition<TImpl>(string)` | Registers an experimental condition |
+| `AddVariant<TImpl>(string)` | Registers an experimental variant (same as AddCondition) |
+| `AddTrial<TImpl>(string)` | Registers an experimental trial (same as AddCondition) |
+| `OnErrorFallbackToControl()` | Falls back to control on error |
+| `OnErrorTryAny()` | Tries all conditions on error |
+| `OnErrorFallbackTo(string)` | Redirects to specific fallback condition on error |
+| `OnErrorTryInOrder(params string[])` | Tries ordered list of fallback conditions on error |
+| `ActiveFrom(DateTimeOffset)` | Activates trial starting at specified time |
+| `ActiveUntil(DateTimeOffset)` | Deactivates trial after specified time |
+| `ActiveWhen(Func<IServiceProvider, bool>)` | Activates trial when predicate returns true |
+
+### Extension Package Methods
+
+| Package | Method | Description |
+|---------|--------|-------------|
+| `ExperimentFramework.FeatureManagement` | `UsingVariantFeatureFlag(string?)` | Variant feature manager selection |
+| `ExperimentFramework.StickyRouting` | `UsingStickyRouting(string?)` | Identity-based sticky routing |
+| `ExperimentFramework.OpenFeature` | `UsingOpenFeature(string?)` | OpenFeature flag selection |
+
+### Extension Package Registration
+
+| Package | Registration Method |
+|---------|---------------------|
+| `ExperimentFramework.FeatureManagement` | `services.AddExperimentVariantFeatureFlags()` |
+| `ExperimentFramework.StickyRouting` | `services.AddExperimentStickyRouting()` |
+| `ExperimentFramework.OpenFeature` | `services.AddExperimentOpenFeature()` |
 
 ### Extension Methods
 
@@ -687,6 +795,7 @@ All async and generic scenarios validated with comprehensive tests:
 |--------|-------------|
 | `AddExperimentFramework(ExperimentFrameworkBuilder)` | Registers framework in DI |
 | `AddOpenTelemetryExperimentTracking()` | Enables OpenTelemetry tracing |
+| `AddSelectionModeProvider<TProvider>()` | Registers a custom selection mode provider |
 
 ## License
 

@@ -1,12 +1,10 @@
-using ExperimentFramework.Decorators;
 using ExperimentFramework.KillSwitch;
 using ExperimentFramework.Metrics;
+using ExperimentFramework.Metrics.Exporters;
 using ExperimentFramework.Models;
 using ExperimentFramework.Resilience;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
-using Xunit.Abstractions;
 
 namespace ExperimentFramework.Tests;
 
@@ -51,7 +49,7 @@ public sealed class EnterpriseFeatureTests
 
     private sealed class ReliableService : IFailingService
     {
-        private int _callCount = 0;
+        private int _callCount;
 
         public Task<string> MayFailAsync(bool shouldFail)
         {
@@ -73,10 +71,10 @@ public sealed class EnterpriseFeatureTests
 
     private sealed class TestMetrics : IExperimentMetrics
     {
-        public List<(string name, long value, KeyValuePair<string, object>[] tags)> Counters { get; } = new();
-        public List<(string name, double value, KeyValuePair<string, object>[] tags)> Histograms { get; } = new();
-        public List<(string name, double value, KeyValuePair<string, object>[] tags)> Gauges { get; } = new();
-        public List<(string name, double value, KeyValuePair<string, object>[] tags)> Summaries { get; } = new();
+        public List<(string name, long value, KeyValuePair<string, object>[] tags)> Counters { get; } = [];
+        public List<(string name, double value, KeyValuePair<string, object>[] tags)> Histograms { get; } = [];
+        public List<(string name, double value, KeyValuePair<string, object>[] tags)> Gauges { get; } = [];
+        public List<(string name, double value, KeyValuePair<string, object>[] tags)> Summaries { get; } = [];
 
         public void IncrementCounter(string name, long value = 1, params KeyValuePair<string, object>[] tags)
         {
@@ -160,7 +158,7 @@ public sealed class EnterpriseFeatureTests
                 .AddDefaultTrial<FastService>("fast")
                 .AddTrial<SlowService>("slow")
                 .OnErrorRedirectAndReplayDefault())
-            .WithTimeout(TimeSpan.FromMilliseconds(100), TimeoutAction.FallbackToDefault)
+            .WithTimeout(TimeSpan.FromMilliseconds(100))
             .UseDispatchProxy();
 
         services.AddExperimentFramework(experiments);
@@ -378,7 +376,7 @@ public sealed class EnterpriseFeatureTests
     public void Prometheus_metrics_exports_in_correct_format()
     {
         // Arrange
-        var metrics = new ExperimentFramework.Metrics.Exporters.PrometheusExperimentMetrics();
+        var metrics = new PrometheusExperimentMetrics();
 
         // Act
         metrics.IncrementCounter("test_counter", 5,
@@ -403,7 +401,7 @@ public sealed class EnterpriseFeatureTests
     public void OpenTelemetry_metrics_creates_meter_with_correct_name()
     {
         // Arrange & Act
-        var metrics = new ExperimentFramework.Metrics.Exporters.OpenTelemetryExperimentMetrics("TestMeter", "1.0.0");
+        var metrics = new OpenTelemetryExperimentMetrics("TestMeter");
         metrics.IncrementCounter("test_counter", 1,
             new KeyValuePair<string, object>("experiment", "test"));
         metrics.RecordHistogram("test_duration", 0.123,
@@ -454,5 +452,191 @@ public sealed class EnterpriseFeatureTests
         // Assert - Metrics should be recorded
         Assert.True(metrics.Counters.Count > 0);
         Assert.True(metrics.Histograms.Count > 0);
+    }
+}
+
+/// <summary>
+/// Tests for NoopKillSwitchProvider.
+/// </summary>
+public sealed class NoopKillSwitchProviderTests
+{
+    [Fact]
+    public void NoopKillSwitchProvider_Instance_is_singleton()
+    {
+        var instance1 = NoopKillSwitchProvider.Instance;
+        var instance2 = NoopKillSwitchProvider.Instance;
+
+        Assert.Same(instance1, instance2);
+    }
+
+    [Fact]
+    public void NoopKillSwitchProvider_IsTrialDisabled_returns_false()
+    {
+        var provider = NoopKillSwitchProvider.Instance;
+
+        Assert.False(provider.IsTrialDisabled(typeof(EnterpriseFeatureTests), "trial1"));
+        Assert.False(provider.IsTrialDisabled(typeof(NoopKillSwitchProviderTests), "any-key"));
+    }
+
+    [Fact]
+    public void NoopKillSwitchProvider_IsExperimentDisabled_returns_false()
+    {
+        var provider = NoopKillSwitchProvider.Instance;
+
+        Assert.False(provider.IsExperimentDisabled(typeof(EnterpriseFeatureTests)));
+        Assert.False(provider.IsExperimentDisabled(typeof(NoopKillSwitchProviderTests)));
+    }
+
+    [Fact]
+    public void NoopKillSwitchProvider_DisableTrial_is_noop()
+    {
+        var provider = NoopKillSwitchProvider.Instance;
+
+        // Should not throw
+        provider.DisableTrial(typeof(EnterpriseFeatureTests), "trial1");
+
+        // Should still return false (no actual disable)
+        Assert.False(provider.IsTrialDisabled(typeof(EnterpriseFeatureTests), "trial1"));
+    }
+
+    [Fact]
+    public void NoopKillSwitchProvider_DisableExperiment_is_noop()
+    {
+        var provider = NoopKillSwitchProvider.Instance;
+
+        // Should not throw
+        provider.DisableExperiment(typeof(EnterpriseFeatureTests));
+
+        // Should still return false (no actual disable)
+        Assert.False(provider.IsExperimentDisabled(typeof(EnterpriseFeatureTests)));
+    }
+
+    [Fact]
+    public void NoopKillSwitchProvider_EnableTrial_is_noop()
+    {
+        var provider = NoopKillSwitchProvider.Instance;
+
+        // Should not throw
+        provider.EnableTrial(typeof(EnterpriseFeatureTests), "trial1");
+    }
+
+    [Fact]
+    public void NoopKillSwitchProvider_EnableExperiment_is_noop()
+    {
+        var provider = NoopKillSwitchProvider.Instance;
+
+        // Should not throw
+        provider.EnableExperiment(typeof(EnterpriseFeatureTests));
+    }
+}
+
+/// <summary>
+/// Tests for Resilience package circuit breaker options and extensions.
+/// </summary>
+public sealed class ResilienceAdditionalTests
+{
+    private interface ISimpleService
+    {
+        string GetName();
+    }
+
+    private sealed class ServiceA : ISimpleService
+    {
+        public string GetName() => "A";
+    }
+
+    private sealed class ServiceB : ISimpleService
+    {
+        public string GetName() => "B";
+    }
+
+    private static void RegisterTestServices(IServiceCollection services)
+    {
+        services.AddScoped<ServiceA>();
+        services.AddScoped<ServiceB>();
+        services.AddScoped<ISimpleService, ServiceA>();
+    }
+
+    [Fact]
+    public void WithCircuitBreaker_with_no_configuration()
+    {
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["FeatureManagement:TestFeature"] = "false"
+            })
+            .Build();
+
+        var services = new ServiceCollection();
+        services.AddSingleton<IConfiguration>(config);
+        RegisterTestServices(services);
+
+        var builder = ExperimentFrameworkBuilder.Create()
+            .Trial<ISimpleService>(t => t
+                .UsingConfigurationKey("FeatureManagement:TestFeature")
+                .AddControl<ServiceA>()
+                .AddCondition<ServiceB>("true"))
+            .WithCircuitBreaker() // No configuration
+            .UseDispatchProxy();
+
+        services.AddExperimentFramework(builder);
+        var sp = services.BuildServiceProvider();
+
+        using var scope = sp.CreateScope();
+        var svc = scope.ServiceProvider.GetRequiredService<ISimpleService>();
+
+        Assert.NotNull(svc);
+        Assert.Equal("A", svc.GetName());
+    }
+
+    [Fact]
+    public void WithCircuitBreaker_with_options_object()
+    {
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["FeatureManagement:TestFeature"] = "false"
+            })
+            .Build();
+
+        var services = new ServiceCollection();
+        services.AddSingleton<IConfiguration>(config);
+        RegisterTestServices(services);
+
+        var options = new CircuitBreakerOptions
+        {
+            FailureThreshold = 5,
+            BreakDuration = TimeSpan.FromSeconds(30)
+        };
+
+        var builder = ExperimentFrameworkBuilder.Create()
+            .Trial<ISimpleService>(t => t
+                .UsingConfigurationKey("FeatureManagement:TestFeature")
+                .AddControl<ServiceA>()
+                .AddCondition<ServiceB>("true"))
+            .WithCircuitBreaker(options)
+            .UseDispatchProxy();
+
+        services.AddExperimentFramework(builder);
+        var sp = services.BuildServiceProvider();
+
+        using var scope = sp.CreateScope();
+        var svc = scope.ServiceProvider.GetRequiredService<ISimpleService>();
+
+        Assert.NotNull(svc);
+    }
+
+    [Fact]
+    public void CircuitBreakerOptions_defaults()
+    {
+        var options = new CircuitBreakerOptions();
+
+        Assert.Equal(5, options.FailureThreshold);
+        Assert.Equal(TimeSpan.FromSeconds(30), options.BreakDuration);
+        Assert.Equal(10, options.MinimumThroughput);
+        Assert.Equal(TimeSpan.FromSeconds(10), options.SamplingDuration);
+        Assert.Null(options.FailureRatioThreshold);
+        Assert.Equal(CircuitBreakerAction.ThrowException, options.OnCircuitOpen);
+        Assert.Null(options.FallbackTrialKey);
     }
 }

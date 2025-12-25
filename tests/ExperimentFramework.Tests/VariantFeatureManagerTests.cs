@@ -1,3 +1,5 @@
+using ExperimentFramework.Naming;
+using ExperimentFramework.Tests.TestInterfaces;
 using ExperimentFramework.Variants;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -5,7 +7,6 @@ using Microsoft.FeatureManagement;
 using TinyBDD;
 using TinyBDD.Xunit;
 using Xunit.Abstractions;
-using ExperimentFramework.Tests.TestInterfaces;
 
 namespace ExperimentFramework.Tests;
 
@@ -51,7 +52,7 @@ public sealed class VariantFeatureManagerTests(ITestOutputHelper output) : TinyB
 
         var experiments = ExperimentFrameworkBuilder.Create()
             .Define<IVariantTestService>(c => c
-                .UsingVariantFeatureFlag("MyVariantFeature")
+                .UsingCustomMode("VariantFeatureFlag", "MyVariantFeature")
                 .AddDefaultTrial<ControlService>("control")
                 .AddTrial<VariantAService>("variant-a")
                 .AddTrial<VariantBService>("variant-b"));
@@ -81,7 +82,7 @@ public sealed class VariantFeatureManagerTests(ITestOutputHelper output) : TinyB
 
         var experiments = ExperimentFrameworkBuilder.Create()
             .Define<IVariantTestService>(c => c
-                .UsingVariantFeatureFlag("MyVariantFeature")
+                .UsingCustomMode("VariantFeatureFlag", "MyVariantFeature")
                 .AddDefaultTrial<ControlService>("control")
                 .AddTrial<VariantAService>("variant-a"));
 
@@ -106,8 +107,8 @@ public sealed class VariantFeatureManagerTests(ITestOutputHelper output) : TinyB
             .Then("availability status is returned", available =>
             {
                 // IsAvailable depends on whether Microsoft.FeatureManagement with variants is installed
-                // In this test environment, it may or may not be available
-                return available == true || available == false;
+                // In this test environment, it may or may not be available - we just verify the property is accessible
+                return true;
             })
             .AssertPassed();
 
@@ -140,7 +141,7 @@ public sealed class VariantFeatureManagerTests(ITestOutputHelper output) : TinyB
 
         var experiments = ExperimentFrameworkBuilder.Create()
             .Define<IVariantTestService>(c => c
-                .UsingVariantFeatureFlag("TestFeature")
+                .UsingCustomMode("VariantFeatureFlag", "TestFeature")
                 .AddDefaultTrial<ControlService>("control"));
 
         services.AddExperimentFramework(experiments);
@@ -298,7 +299,7 @@ public sealed class VariantFeatureManagerTests(ITestOutputHelper output) : TinyB
             var experiments = ExperimentFrameworkBuilder.Create()
                 .UseNamingConvention(new CustomVariantNamingConvention())
                 .Define<IVariantTestService>(c => c
-                    .UsingVariantFeatureFlag() // Uses convention
+                    .UsingCustomMode("VariantFeatureFlag") // Uses convention
                     .AddDefaultTrial<ControlService>("control"));
 
             services.AddExperimentFramework(experiments);
@@ -342,7 +343,7 @@ public sealed class VariantFeatureManagerTests(ITestOutputHelper output) : TinyB
     }
 
     // Custom variant naming convention for testing
-    private sealed class CustomVariantNamingConvention : ExperimentFramework.Naming.IExperimentNamingConvention
+    private sealed class CustomVariantNamingConvention : IExperimentNamingConvention
     {
         public string FeatureFlagNameFor(Type serviceType) => $"CustomFlags:{serviceType.Name}";
         public string VariantFlagNameFor(Type serviceType) => $"CustomVariants:{serviceType.Name}";
