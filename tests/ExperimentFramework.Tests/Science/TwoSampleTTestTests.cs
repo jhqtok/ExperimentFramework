@@ -6,11 +6,11 @@ namespace ExperimentFramework.Tests.Science;
 public class TwoSampleTTestTests
 {
     [Fact]
-    public void Perform_WithEqualMeans_ReturnsNotSignificant()
+    public void Perform_ReturnsValidResult()
     {
         // Arrange
         var control = new double[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
-        var treatment = new double[] { 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 }; // Same distribution, shifted by 1
+        var treatment = new double[] { 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 };
 
         // Act
         var result = TwoSampleTTest.Instance.Perform(control, treatment, 0.05);
