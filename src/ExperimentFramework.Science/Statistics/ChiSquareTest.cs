@@ -178,7 +178,7 @@ public sealed class ChiSquareTest : IStatisticalTest
         var numerator = Math.Pow(Math.Abs(a * d - b * c) - n / 2, 2) * n;
         var denominator = (a + b) * (c + d) * (a + c) * (b + d);
 
-        if (denominator == 0)
+        if (denominator < double.Epsilon)
             return 0;
 
         return numerator / denominator;

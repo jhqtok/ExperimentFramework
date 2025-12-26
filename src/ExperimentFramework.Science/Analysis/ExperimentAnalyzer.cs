@@ -86,12 +86,9 @@ public sealed class ExperimentAnalyzer : IExperimentAnalyzer
             kvp => kvp.Value.Count);
 
         // Check minimum sample sizes
-        foreach (var kvp in sampleSizes)
+        foreach (var kvp in sampleSizes.Where(kvp => kvp.Value < options.MinimumSampleSize))
         {
-            if (kvp.Value < options.MinimumSampleSize)
-            {
-                warnings.Add($"Condition '{kvp.Key}' has only {kvp.Value} samples (minimum: {options.MinimumSampleSize}).");
-            }
+            warnings.Add($"Condition '{kvp.Key}' has only {kvp.Value} samples (minimum: {options.MinimumSampleSize}).");
         }
 
         // Determine outcome type (check if any successes recorded, indicating binary metric)
@@ -150,14 +147,15 @@ public sealed class ExperimentAnalyzer : IExperimentAnalyzer
         var secondaryResults = new Dictionary<string, StatisticalTestResult>();
         if (treatmentKeys.Count > 1 && dataByCondition.TryGetValue(controlKey, out var ctrlData))
         {
-            foreach (var treatmentKey in treatmentKeys.Skip(1))
+            var validTreatments = treatmentKeys
+                .Skip(1)
+                .Where(key => dataByCondition.TryGetValue(key, out var data) && data.Count >= 2);
+
+            foreach (var treatmentKey in validTreatments)
             {
-                if (dataByCondition.TryGetValue(treatmentKey, out var trtData) &&
-                    trtData.Count >= 2)
-                {
-                    var result = PerformStatisticalTest(ctrlData, trtData, isBinary, options.Alpha, hypothesis);
-                    secondaryResults[treatmentKey] = result;
-                }
+                var trtData = dataByCondition[treatmentKey];
+                var result = PerformStatisticalTest(ctrlData, trtData, isBinary, options.Alpha, hypothesis);
+                secondaryResults[treatmentKey] = result;
             }
         }
 

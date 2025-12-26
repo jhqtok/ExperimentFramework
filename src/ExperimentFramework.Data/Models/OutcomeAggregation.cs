@@ -127,8 +127,8 @@ public sealed class OutcomeAggregation
             Count = Count + 1,
             Sum = Sum + value,
             SumOfSquares = SumOfSquares + (value * value),
-            Min = Math.Min(Min == double.MaxValue ? value : Min, value),
-            Max = Math.Max(Max == double.MinValue ? value : Max, value),
+            Min = Count == 0 ? value : Math.Min(Min, value),
+            Max = Count == 0 ? value : Math.Max(Max, value),
             SuccessCount = SuccessCount + (isSuccess ? 1 : 0),
             FirstTimestamp = newFirst,
             LastTimestamp = newLast

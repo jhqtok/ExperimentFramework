@@ -209,13 +209,7 @@ public sealed class InMemoryOutcomeStore : IOutcomeStore
             toDelete = toDelete.Where(o => o.Timestamp < query.ToTimestamp.Value);
 
         var idsToDelete = toDelete.Select(o => o.Id).ToList();
-        long deleted = 0;
-
-        foreach (var id in idsToDelete)
-        {
-            if (_outcomes.TryRemove(id, out _))
-                deleted++;
-        }
+        long deleted = idsToDelete.Count(id => _outcomes.TryRemove(id, out _));
 
         // Note: Aggregations are not updated on delete for simplicity
         // In a production implementation, you might want to rebuild aggregations

@@ -61,17 +61,13 @@ public sealed class InMemorySnapshotStore : ISnapshotStore
             return ValueTask.FromResult<IReadOnlyList<ExperimentSnapshot>>(Array.Empty<ExperimentSnapshot>());
         }
 
-        var snapshots = new List<ExperimentSnapshot>();
-        foreach (var id in ids)
-        {
-            if (_snapshots.TryGetValue(id, out var snapshot))
-            {
-                snapshots.Add(snapshot);
-            }
-        }
+        var snapshots = ids
+            .Where(id => _snapshots.ContainsKey(id))
+            .Select(id => _snapshots[id])
+            .OrderBy(s => s.Timestamp)
+            .ToList();
 
-        return ValueTask.FromResult<IReadOnlyList<ExperimentSnapshot>>(
-            snapshots.OrderBy(s => s.Timestamp).ToList());
+        return ValueTask.FromResult<IReadOnlyList<ExperimentSnapshot>>(snapshots);
     }
 
     /// <inheritdoc />
@@ -87,18 +83,11 @@ public sealed class InMemorySnapshotStore : ISnapshotStore
             return ValueTask.FromResult<ExperimentSnapshot?>(null);
         }
 
-        ExperimentSnapshot? latest = null;
-        foreach (var id in ids)
-        {
-            if (_snapshots.TryGetValue(id, out var snapshot) &&
-                snapshot.Type == type)
-            {
-                if (latest == null || snapshot.Timestamp > latest.Timestamp)
-                {
-                    latest = snapshot;
-                }
-            }
-        }
+        var latest = ids
+            .Where(id => _snapshots.TryGetValue(id, out var s) && s.Type == type)
+            .Select(id => _snapshots[id])
+            .OrderByDescending(s => s.Timestamp)
+            .FirstOrDefault();
 
         return ValueTask.FromResult(latest);
     }
@@ -134,15 +123,7 @@ public sealed class InMemorySnapshotStore : ISnapshotStore
             return ValueTask.FromResult(0);
         }
 
-        var count = 0;
-        foreach (var id in ids)
-        {
-            if (_snapshots.TryRemove(id, out _))
-            {
-                count++;
-            }
-        }
-
+        var count = ids.Count(id => _snapshots.TryRemove(id, out _));
         return ValueTask.FromResult(count);
     }
 

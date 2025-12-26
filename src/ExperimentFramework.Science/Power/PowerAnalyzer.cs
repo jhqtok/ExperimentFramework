@@ -38,18 +38,10 @@ public sealed class PowerAnalyzer : IPowerAnalyzer
             : normal.InverseCumulativeDistribution(1 - alpha / 2);
         var zBeta = normal.InverseCumulativeDistribution(power);
 
-        double n;
-
-        if (options.OutcomeType == PowerOutcomeType.Binary && options.BaselineProportion.HasValue)
-        {
-            // Sample size for comparing two proportions
-            n = CalculateBinarySampleSize(effectSize, options.BaselineProportion.Value, zAlpha, zBeta, options.AllocationRatio);
-        }
-        else
-        {
-            // Sample size for comparing two means (continuous)
-            n = CalculateContinuousSampleSize(effectSize, zAlpha, zBeta, options.AllocationRatio);
-        }
+        // Sample size calculation: binary proportions vs continuous means
+        var n = options.OutcomeType == PowerOutcomeType.Binary && options.BaselineProportion.HasValue
+            ? CalculateBinarySampleSize(effectSize, options.BaselineProportion.Value, zAlpha, zBeta, options.AllocationRatio)
+            : CalculateContinuousSampleSize(effectSize, zAlpha, zBeta, options.AllocationRatio);
 
         return (int)Math.Ceiling(n);
     }
@@ -73,16 +65,10 @@ public sealed class PowerAnalyzer : IPowerAnalyzer
             ? normal.InverseCumulativeDistribution(1 - alpha)
             : normal.InverseCumulativeDistribution(1 - alpha / 2);
 
-        double power;
-
-        if (options.OutcomeType == PowerOutcomeType.Binary && options.BaselineProportion.HasValue)
-        {
-            power = CalculateBinaryPower(sampleSizePerGroup, effectSize, options.BaselineProportion.Value, zAlpha, options.AllocationRatio);
-        }
-        else
-        {
-            power = CalculateContinuousPower(sampleSizePerGroup, effectSize, zAlpha, options.AllocationRatio);
-        }
+        // Power calculation: binary proportions vs continuous means
+        var power = options.OutcomeType == PowerOutcomeType.Binary && options.BaselineProportion.HasValue
+            ? CalculateBinaryPower(sampleSizePerGroup, effectSize, options.BaselineProportion.Value, zAlpha, options.AllocationRatio)
+            : CalculateContinuousPower(sampleSizePerGroup, effectSize, zAlpha, options.AllocationRatio);
 
         return Math.Min(1.0, Math.Max(0.0, power));
     }
