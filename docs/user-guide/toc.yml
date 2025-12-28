@@ -1,30 +1,71 @@
+# Getting Started
 - name: Introduction
   href: index.md
 - name: Getting Started
   href: getting-started.md
+- name: Configuration
+  href: configuration.md
 - name: Core Concepts
   href: core-concepts.md
-- name: Selection Modes
-  href: selection-modes.md
-- name: OpenFeature Integration
-  href: openfeature.md
-- name: Extensibility
-  href: extensibility.md
-- name: Error Handling
-  href: error-handling.md
-- name: Telemetry
-  href: telemetry.md
-- name: Timeout Enforcement
-  href: timeout-enforcement.md
-- name: Circuit Breaker
-  href: circuit-breaker.md
-- name: Metrics
-  href: metrics.md
-- name: Kill Switch
-  href: kill-switch.md
-- name: Naming Conventions
-  href: naming-conventions.md
-- name: Advanced Topics
-  href: advanced.md
-- name: Samples
-  href: samples.md
+
+# Traffic Routing
+- name: Selection & Routing
+  items:
+    - name: Selection Modes
+      href: selection-modes.md
+    - name: OpenFeature Integration
+      href: openfeature.md
+    - name: Naming Conventions
+      href: naming-conventions.md
+
+# Resilience & Reliability
+- name: Resilience
+  items:
+    - name: Error Handling
+      href: error-handling.md
+    - name: Circuit Breaker
+      href: circuit-breaker.md
+    - name: Timeout Enforcement
+      href: timeout-enforcement.md
+    - name: Kill Switch
+      href: kill-switch.md
+
+# Observability
+- name: Observability
+  items:
+    - name: Telemetry
+      href: telemetry.md
+    - name: Metrics
+      href: metrics.md
+
+# Scientific Experimentation
+- name: Scientific Experimentation
+  items:
+    - name: Overview
+      href: power-analysis.md
+    - name: Data Collection
+      href: data-collection.md
+    - name: Statistical Analysis
+      href: statistical-analysis.md
+    - name: Hypothesis Testing
+      href: hypothesis-testing.md
+    - name: Cheat Sheet
+      href: scientific-cheat-sheet.md
+
+# Extensibility & Plugins
+- name: Extending the Framework
+  items:
+    - name: Extensibility Guide
+      href: extensibility.md
+    - name: Plugin System
+      href: plugins.md
+    - name: Source Generators
+      href: SourceGeneratorGuide.md
+
+# Reference
+- name: Reference
+  items:
+    - name: Advanced Topics
+      href: advanced.md
+    - name: Samples
+      href: samples.md
