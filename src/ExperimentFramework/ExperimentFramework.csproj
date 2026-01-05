@@ -38,11 +38,6 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="$(MicrosoftExtensionsVersion)" />
   </ItemGroup>
 
-  <!-- System.Text.Json is needed for netstandard2.1, but is built-in for .NET 8+ -->
-  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.1'">
-    <PackageReference Include="System.Text.Json" Version="8.0.5" />
-  </ItemGroup>
-
   <ItemGroup>
     <!-- Reference to source generator project (runs at compile-time) -->
     <ProjectReference Include="..\ExperimentFramework.Generators\ExperimentFramework.Generators.csproj"
